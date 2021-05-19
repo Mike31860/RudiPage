@@ -63,7 +63,7 @@ function Home() {
                     variant="h4"
                     color="primary"
                   >
-                    Softwareeeeee Techniques, Tools, and Infrastructure for Computational and Data-intensive Applications
+                    Softwareeeeeee Techniques, Tools, and Infrastructure for Computational and Data-intensive Applications
                   </Typography> 
                
                <br/>
