@@ -5,7 +5,7 @@ import AssignmentIcon from '@material-ui/icons/Assignment';
 export const SidebarData = [
   {
     title: 'Projects',
-    path: '/home',
+    path: '/',
     icon: <FindInPageIcon />,
     cName: 'nav-text'
   },

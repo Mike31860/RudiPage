@@ -34,7 +34,7 @@ function App() {
       <Router >
         <Navbar className={classes.Centerbar} />
         <Switch>
-          <Route  path='/home' exact component={Home} />
+          <Route  path='/' exact component={Home} />
           <Route path='/contacts'  exact component={Contacts}/>
           <Route render={() => 
                 <div className={classes.content}>
