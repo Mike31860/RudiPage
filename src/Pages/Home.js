@@ -9,24 +9,40 @@ import {
 } from "@material-ui/core";
 
 const useStyles = makeStyles((theme) => ({
- 
   content: {
     height: "100%",
     display: "flex",
     alignItems: "auto",
-    paddingLeft:theme.spacing(5),
     flexDirection: "column",
+ 
+    [theme.breakpoints.down('xl')]: {
+      paddingLeft: theme.spacing(15),     
+    },
+    [theme.breakpoints.down('sm')]: {
+      paddingLeft: theme.spacing(20),     
+    },
+    
   },
   contentBody: {
-    flexGrow: 2,
-    display: "flex",
-
-    width:"70%",
+    width:"80%",
     flexDirection: "column",
-   /*  alignItems: "flex-start", */
+   
   },
   title: {
     marginTop: theme.spacing(2),
+    fontFamily: 'KoHo',
+    [theme.breakpoints.down('sm')]: {
+      paddingLeft: theme.spacing(2),
+      fontSize: 15,
+     },
+     [theme.breakpoints.down('xs')]: {
+      paddingLeft: theme.spacing(2),
+      fontSize: 15,
+     },
+     [theme.breakpoints.down('md')]: {
+      paddingLeft: theme.spacing(2),
+      fontSize: 20,
+     }
   },
   grid: {
     height: '100%',
@@ -52,7 +68,6 @@ function Home() {
     <div >
        <Grid
           className={classes.content}
-          xs={12}
           alignItems="center"
 
         >          
@@ -63,7 +78,7 @@ function Home() {
                     variant="h4"
                     color="primary"
                   >
-                    Softwareeeeeee Techniques, Tools, and Infrastructure for Computational and Data-intensive Applications
+                    Software Techniques, Tools, and Infrastructure for Computational and Data-intensive Applications
                   </Typography> 
                
                <br/>
@@ -77,7 +92,7 @@ function Home() {
 
                     >
                     <Grid
-                        className={classes.content}
+                      
                         item
                         xs
                         alignItems="center"    

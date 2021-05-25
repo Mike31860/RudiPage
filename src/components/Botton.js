@@ -1,5 +1,7 @@
 import React from 'react'
 import PropTypes from 'prop-types';
+import SearchIcon from '@material-ui/icons/Search';
+import IconButton from '@material-ui/core/IconButton';
 import {
     Button,
   } from "@material-ui/core";
@@ -12,9 +14,9 @@ const Botton = props =>{
 
 
     return (
-        <Button variant="contained"  color="primary"
-        onClick={onclick}
-        name='Page'>Page</Button>
+        <IconButton color="primary" aria-label="upload picture" component="span" onClick={onclick}>
+          <SearchIcon />
+        </IconButton>     
     )
 }
 Botton.propTypes = {

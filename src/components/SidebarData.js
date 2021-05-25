@@ -1,26 +1,24 @@
 import React from 'react';
-import * as FaIcons from 'react-icons/fa';
-import * as AiIcons from 'react-icons/ai';
-import * as IoIcons from 'react-icons/io';
-import * as GrIcons from 'react-icons/gr';
-
+import PeopleAltRoundedIcon from '@material-ui/icons/PeopleAltRounded';
+import FindInPageIcon from '@material-ui/icons/FindInPage';
+import AssignmentIcon from '@material-ui/icons/Assignment';
 export const SidebarData = [
   {
     title: 'Projects',
     path: '/',
-    icon: <AiIcons.AiFillHome />,
+    icon: <FindInPageIcon />,
     cName: 'nav-text'
   },
   {
     title: 'Contacts',
     path: '/Contacts',
-    icon: <IoIcons.IoIosContacts />,
+    icon: <PeopleAltRoundedIcon />,
     cName: 'nav-text'
   },
   {
     title: 'Articles',
     path: '/Articles',
-    icon: <FaIcons.FaReadme />,
+    icon: <AssignmentIcon/>,
     cName: 'nav-text'
   },
   

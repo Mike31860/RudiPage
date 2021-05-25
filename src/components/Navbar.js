@@ -7,9 +7,13 @@ import './Navbar.css';
 import { IconContext } from 'react-icons';
 import Avatar from '@material-ui/core/Avatar';
 import ImgOne from '../static/images/logo.jpg';
-import Grid from '@material-ui/core/Grid';
 import { makeStyles } from '@material-ui/core/styles';
 import Paper from '@material-ui/core/Paper';
+import {
+  Grid,
+  Typography,
+  Button,
+} from "@material-ui/core";
 
 const useStyles = makeStyles((theme) => ({
   root: {
@@ -20,13 +24,23 @@ const useStyles = makeStyles((theme) => ({
     textAlign: 'center',
     color: theme.palette.text.secondary,
   },
+ 
+  title: {
+    color: theme.palette.common.white,
+    marginTop: theme.spacing(2),
+   
+      fontSize: 19,
+    
+  },
+  
+
 }));
 
 function Navbar() {
   const [sidebar, setSidebar] = useState(true);
   const classes = useStyles();
   const showSidebar = () => setSidebar(!sidebar);
-  const element = <p style={{ color: 'white' }}>University of Delaware Lab</p>
+  
 
   return (
     <>
@@ -41,17 +55,21 @@ function Navbar() {
         <nav className={sidebar ? 'nav-menu active' : 'nav-menu'}>
           <ul className='nav-menu-items' /* onClick={showSidebar} */>
             <li className='navbar-toggle'>
-              {/* <Link to='#' className='menu-bars'>
-                <AiIcons.AiOutlineClose />
-              </Link> */}
               <Grid container spacing={3}>
                   <Grid item xs={12}>
                   </Grid>
-                  <Grid item xs={3}>
+                  <Grid item>
                   <Avatar alt="Remy Sharp" src={ImgOne}/>
                   </Grid>
-                  <Grid item xs={6}>
-                    <p>{element}</p>
+                  <Grid item xs={6} >
+                      <Typography
+                        className={classes.title}
+                        variant="h10"
+                       
+                      >
+                      Delaware Lab
+                      </Typography> 
+                   
                   </Grid>
         
               </Grid>
