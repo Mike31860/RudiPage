@@ -4,6 +4,8 @@ import Tableinfo from '../components/Tableinfo';
 import RecipeReviewCard from '../components/RecipeReviewCard';
 import ImgAkshay from '../static/images/Askhay.png';
 import ImgRudi from '../static/images/Rudi.jpg';
+import '../resources/KoHo.css';
+import Paper from '@material-ui/core/Paper';
 import {
   Grid,
   Typography,
@@ -15,32 +17,50 @@ const useStyles = makeStyles((theme) => ({
     height: "100%",
     display: "flex",
     alignItems: "auto",
-    paddingLeft:theme.spacing(5),
     flexDirection: "column",
+ 
+    [theme.breakpoints.down('xl')]: {
+      paddingLeft: theme.spacing(35),     
+    },
+    [theme.breakpoints.down('sm')]: {
+      paddingLeft: theme.spacing(25),     
+    },
+    
   },
   contentBody: {
     flexGrow: 2,
     display: "flex",
 
-    width:"70%",
+    /* width:"70%", */
     flexDirection: "column",
    /*  alignItems: "flex-start", */
   },
   title: {
     marginTop: theme.spacing(2),
+    fontFamily: 'KoHo',
+    [theme.breakpoints.down('sm')]: {
+      paddingLeft: theme.spacing(2),
+      fontSize: 15,
+     },
+     [theme.breakpoints.down('xl')]: {
+      paddingLeft: theme.spacing(2),
+      fontSize: 35,
+     },
+
   },
   grid: {
     height: '100%',
     width: '100%'
   },
-  root2: {
+  root: {
     flexGrow: 1,
   },
   paper: {
     padding: theme.spacing(2),
     textAlign: 'center',
-        color: theme.palette.text.secondary,
+    color: theme.palette.text.secondary,
   },
+ 
 
 }));
 const rows = [
@@ -69,43 +89,48 @@ const rows = [
 function Contacts() {
   const classes = useStyles();
   return (
-    <div >
-       <Grid
-          className={classes.content}
-          xs={12}
+
+
+    <div className={classes.content}>
+      <Grid
+         
           alignItems="center"
-        >                 
-            <div className={classes.contentBody}>        
-                  <Typography
-                    className={classes.title}
-                    variant="h4"
-                    color="primary"
-                  >
-                    Contacts
-                  </Typography>              
-               <br/>
-               <div className={classes.root2}>       
-                    <br/>
-                    <Grid 
-                        className={classes.grid}
-                        container
-                        spacing={2}
-                    >
+
+        >  
+              <Typography
+                  className={classes.title}
+                  variant="h4"
+                  color='primary'
+              >
+                Information of Contact  
+              </Typography>
+              <br/>
+
+
+            <Grid container spacing={4}>   
+
+              {rows.map((row) => (
+                <Grid
+                    className={classes.row}
                     
-                    {rows.map((row) => (
-                      <Grid
-                      className={classes.content}                       
-                  >  
-                      <RecipeReviewCard id={row.id} name={row.Name} description={row.Description} image={row.image} page={row.Page}/>
-                      </Grid> 
-                    ))}
-                        
-                                
-                    </Grid>
-                </div>           
-            </div>
-      </Grid>   
-  </div>   
+                    item xs={6} sm={3}                      
+                >  
+                    <RecipeReviewCard id={row.id} name={row.Name} description={row.Description} image={row.image} page={row.Page}/>
+                </Grid> 
+                ))}  
+              
+              </Grid>
+        </Grid>      
+    </div>
+
+
+
+
+
+
+
+
+  
   );
 }
 export default Contacts;

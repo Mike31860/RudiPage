@@ -10,7 +10,7 @@ import Collapse from '@material-ui/core/Collapse';
 import Avatar from '@material-ui/core/Avatar';
 import IconButton from '@material-ui/core/IconButton';
 import Typography from '@material-ui/core/Typography';
-import { red } from '@material-ui/core/colors';
+import { red , blue} from '@material-ui/core/colors';
 import FavoriteIcon from '@material-ui/icons/Favorite';
 import ShareIcon from '@material-ui/icons/Share';
 import ExpandMoreIcon from '@material-ui/icons/ExpandMore';
@@ -18,16 +18,16 @@ import MoreVertIcon from '@material-ui/icons/MoreVert';
 import PropTypes from 'prop-types';
 import ImgAkshay from '../static/images/Askhay.png';
 import ImgRudi from '../static/images/Rudi.jpg';
-
+import ContactMailIcon from '@material-ui/icons/ContactMail';
 
 const useStyles = makeStyles((theme) => ({
   root: {
-    maxWidth: 445,
+    maxWidth: 400,
   },
   ima:{
     display: 'flex',
-    height: '300px',
-    width:'300px',
+    height: '200px',
+    width:'200px',
     justifyContent: 'center',
     alignItems: "center",
     paddingLeft:"15%",
@@ -54,7 +54,7 @@ const useStyles = makeStyles((theme) => ({
     transform: 'rotate(180deg)',
   },
   avatar: {
-    backgroundColor: red[500],
+    backgroundColor: blue[500],
   },
 }));
 const RecipeReviewCard = props =>{
@@ -98,7 +98,7 @@ const RecipeReviewCard = props =>{
           aria-expanded={expanded}
           aria-label="show more"
         >
-          <ExpandMoreIcon />
+          <ContactMailIcon fontSize="large"  style={{ color: blue[500] }}  />
         </IconButton>
       </CardActions>
     
