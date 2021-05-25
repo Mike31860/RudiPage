@@ -5,19 +5,19 @@ import AssignmentIcon from '@material-ui/icons/Assignment';
 export const SidebarData = [
   {
     title: 'Projects',
-    path: '/',
+    path: '/home',
     icon: <FindInPageIcon />,
     cName: 'nav-text'
   },
   {
     title: 'Contacts',
-    path: '/Contacts',
+    path: '/contacts',
     icon: <PeopleAltRoundedIcon />,
     cName: 'nav-text'
   },
   {
     title: 'Articles',
-    path: '/Articles',
+    path: '/articles',
     icon: <AssignmentIcon/>,
     cName: 'nav-text'
   },

@@ -1,6 +1,7 @@
 import React from 'react'
 import PropTypes from 'prop-types';
 import { makeStyles } from '@material-ui/core/styles';
+import { useHistory } from "react-router-dom";
 import {
     Button,
     Link,
@@ -35,17 +36,21 @@ import {
   }));
 const Collaborators = props =>{
   const classes = useStyles();
+  let history = useHistory();
     const onclick = () => {
     
-          window.location.replace(`${props.page}`);
-        
+          window.location.assign(`${props.page}`);
+  
       };
-      console.log(props.page)
+     
 
     return (
       
       <div>
-        {props.page!==undefined && props.page==="No" || props.name==="No yet" ?(
+        {(props.page!==undefined && props.page==="No") || props.name==="No yet" 
+        || props.name==="Parinaz Barakhshan" || props.name==="as well as a group of 50+ researchers."
+        || props.name==="Jan Sher Khan" || props.name==="Hao Wang" 
+        || props.name==="Bill Totten"?(
             props.name
         ):(
           <Link variant="contained"  color="primary"
