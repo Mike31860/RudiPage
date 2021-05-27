@@ -18,11 +18,14 @@ import MoreVertIcon from '@material-ui/icons/MoreVert';
 import PropTypes from 'prop-types';
 import ImgAkshay from '../static/images/Askhay.png';
 import ImgRudi from '../static/images/Rudi.jpg';
+/* import ImgParinaz from '../static/images/parinaz.jpg'; */
+import ImgParinaz from '../static/images/parina.png';
 import ContactMailIcon from '@material-ui/icons/ContactMail';
 
 const useStyles = makeStyles((theme) => ({
   root: {
-    maxWidth: 400,
+    /* maxWidth: 400, */
+    width: 300
   },
   ima:{
     display: 'flex',
@@ -81,7 +84,7 @@ const RecipeReviewCard = props =>{
         subheader="University of Delaware"
       />
 
-      <img  className={classes.ima} src={props.id==1?ImgRudi:(props.id==2?ImgAkshay:ImgAkshay
+      <img  className={classes.ima} src={props.id==1?ImgRudi:(props.id==2?ImgAkshay:ImgParinaz
         )}/>
       <CardContent>
         <Typography variant="body2" color="textSecondary" component="p">

@@ -5,6 +5,7 @@ import { BrowserRouter as Router, Switch, Route } from 'react-router-dom';
 import Home from './Pages/Home';
 import { makeStyles } from '@material-ui/core/styles';
 import Contacts from './Pages/Contacts';
+import Articles from './Pages/Articles';
 
 const useStyles = makeStyles((theme) => ({
   Centerbar: {
@@ -36,6 +37,7 @@ function App() {
         <Switch>
           <Route  path='/' exact component={Home} />
           <Route path='/contacts'  exact component={Contacts}/>
+          <Route path='/articles'  exact component={Articles}/>
           <Route render={() => 
                 <div className={classes.content}>
                    <h1 >404: page not found</h1>

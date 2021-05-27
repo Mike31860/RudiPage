@@ -1,0 +1,3401 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html lang="en">
+<head>
+<title>JabRef References output</title>
+<meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+<script type="text/javascript">
+
+// QuickSearch script for JabRef HTML export 
+// Version: 2.0
+//
+// Copyright (c) 2006-2008, Mark Schenk
+//
+// This software is distributed under a Creative Commons Attribution 3.0 License
+// http://creativecommons.org/licenses/by/3.0/
+
+// Some features:
+// + optionally searches Abstracts and Reviews
+// + allows RegExp searches
+//   e.g. to search for entries between 1980 and 1989, type:  198[0-9]
+//   e.g. for any entry ending with 'symmetry', type:  symmetry$
+//   e.g. for all reftypes that are books: ^book$, or ^article$
+//   e.g. for entries by either John or Doe, type john|doe
+// + easy toggling of Abstract/Review/BibTeX
+
+// Search settings
+var searchAbstract = true;
+var searchReview = true;
+
+// Speed optimisation introduced some esoteric problems with certain RegExp searches
+// e.g. if the previous search is 200[-7] and the next search is 200[4-7] then the search doesn't work properly until the next 'keyup'
+// hence the searchOpt can be turned off for RegExp adepts
+var searchOpt = true;
+
+if (window.addEventListener) {
+	window.addEventListener("load",initSearch,false); }
+else if (window.attachEvent) {
+	window.attachEvent("onload", initSearch); }
+
+function initSearch() {
+	// basic object detection
+	if(!document.getElementById || !document.getElementsByTagName) { return; }
+	if (!document.getElementById('qstable')||!document.getElementById('qs')) { return; }
+
+	// find QS table and appropriate rows
+	searchTable = document.getElementById('qstable');
+	var allRows = searchTable.getElementsByTagName('tbody')[0].getElementsByTagName('tr');
+
+	// split all rows into entryRows and infoRows (e.g. abstract, review, bibtex)
+	entryRows = new Array();
+	infoRows = new Array(); absRows = new Array(); revRows = new Array();
+
+	for (var i=0, k=0, j=0; i<allRows.length;i++) {
+		if (allRows[i].className.match(/entry/)) {
+			entryRows[j++] = allRows[i];
+		} else {
+			infoRows[k++] = allRows[i];
+			// check for abstract/review
+			if (allRows[i].className.match(/abstract/)) {
+				absRows.push(allRows[i]);
+			} else if (allRows[i].className.match(/review/)) {
+				revRows.push(allRows[i]);
+			}
+		}
+	}
+
+	//number of entries and rows
+	numRows = allRows.length;
+	numEntries = entryRows.length;
+	numInfo = infoRows.length;
+	numAbs = absRows.length;
+	numRev = revRows.length;
+
+	//find the query field
+	qsfield = document.getElementById('qsfield');
+
+	// previous search term; used for speed optimisation
+	prevSearch = '';
+
+	//find statistics location
+	stats = document.getElementById('stat');
+	setStatistics(-1);
+
+	// creates the appropriate search settings
+	createQSettingsDialog();
+
+	// shows the searchfield
+	document.getElementById('qs').style.display = 'block';
+	document.getElementById('qsfield').onkeyup = testEvent;
+}
+
+function quickSearch(tInput){
+
+	 if (tInput.value.length == 0) {
+		showAll();
+		setStatistics(-1);
+		qsfield.className = '';
+		return;
+	} else {
+		// only search for valid RegExp
+		try {
+			var searchText = new RegExp(tInput.value,"i")
+			closeAllInfo();
+			qsfield.className = '';
+		}
+		catch(err) {
+			prevSearch = tInput.value;
+			qsfield.className = 'invalidsearch';
+			return;
+		}
+	}
+	
+	// count number of hits
+	var hits = 0;
+
+	// start looping through all entry rows
+	for (var i = 0; cRow = entryRows[i]; i++){
+
+		// only show search the cells if it isn't already hidden OR if the search term is getting shorter, then search all
+		// some further optimisation is possible: if the search string is getting shorter, and the row is already visible, skip it. Then be careful with hits!
+		if(!searchOpt || cRow.className.indexOf('noshow')==-1 || tInput.value.length <= prevSearch.length){
+			var found = false; 
+
+			var inCells = cRow.getElementsByTagName('td');
+			var numCols = inCells.length;
+				
+			for (var j=0; j<numCols; j++) {
+				cCell = inCells[j];
+				var t = cCell.innerText?cCell.innerText:getTextContent(cCell);
+				if (t.search(searchText) != -1){ 
+					found=true; 
+					break;
+				} 
+			}
+
+			// look for further hits in Abstract and Review
+			if(!found) {
+				var articleid = cRow.id;
+				if(searchAbstract && (abs = document.getElementById('abs_'+articleid))) {
+					if (getTextContent(abs).search(searchText) != -1){ found=true; } 
+				}
+				if(searchReview && (rev = document.getElementById('rev_'+articleid))) {
+					if (getTextContent(rev).search(searchText) != -1){ found=true; } 
+				}
+			}
+			
+			if(found) {
+				cRow.className = 'entry show';
+				hits++;
+			} else {
+				cRow.className = 'entry noshow';
+			}
+		}
+	}
+
+	// update statistics
+	setStatistics(hits)
+	
+	// set previous search value
+	prevSearch = tInput.value;
+}
+
+function toggleInfo(articleid,info) {
+
+	var entry = document.getElementById(articleid);
+	var abs = document.getElementById('abs_'+articleid);
+	var rev = document.getElementById('rev_'+articleid);
+	var bib = document.getElementById('bib_'+articleid);
+	
+	if (abs && info == 'abstract') {
+		if(abs.className.indexOf('abstract') != -1) {
+		abs.className.indexOf('noshow') == -1?abs.className = 'abstract noshow':abs.className = 'abstract';
+		}
+	} else if (rev && info == 'review') {
+		if(rev.className.indexOf('review') != -1) {
+		rev.className.indexOf('noshow') == -1?rev.className = 'review noshow':rev.className = 'review';
+		}
+	} else if (bib && info == 'bibtex') {
+		if(bib.className.indexOf('bibtex') != -1) {
+		bib.className.indexOf('noshow') == -1?bib.className = 'bibtex noshow':bib.className = 'bibtex';
+		}		
+	} else { 
+		return;
+	}
+
+	// check if one or the other is available
+	var revshow = false;
+	var absshow = false;
+	var bibshow = false;
+	(abs && abs.className.indexOf('noshow') == -1)? absshow = true: absshow = false;
+	(rev && rev.className.indexOf('noshow') == -1)? revshow = true: revshow = false;	
+	(bib && bib.className == 'bibtex')? bibshow = true: bibshow = false;
+	
+	// highlight original entry
+	if(entry) {
+		if (revshow || absshow || bibshow) {
+		entry.className = 'entry highlight show';
+		} else {
+		entry.className = 'entry show';
+		}		
+	}
+	
+	// When there's a combination of abstract/review/bibtex showing, need to add class for correct styling
+	if(absshow) {
+		(revshow||bibshow)?abs.className = 'abstract nextshow':abs.className = 'abstract';
+	} 
+	if (revshow) {
+		bibshow?rev.className = 'review nextshow': rev.className = 'review';
+	}
+	
+}
+
+function setStatistics (hits) {
+	if(hits < 0) { hits=numEntries; }
+	if(stats) { stats.firstChild.data = hits + '/' + numEntries}
+}
+
+function getTextContent(node) {
+	// Function written by Arve Bersvendsen
+	// http://www.virtuelvis.com
+	
+	if (node.nodeType == 3) {
+	return node.nodeValue;
+	} // text node
+	if (node.nodeType == 1) { // element node
+	var text = [];
+	for (var chld = node.firstChild;chld;chld=chld.nextSibling) {
+		text.push(getTextContent(chld));
+	}
+	return text.join("");
+	} return ""; // some other node, won't contain text nodes.
+}
+
+function showAll(){
+	// first close all abstracts, reviews, etc.
+	closeAllInfo();
+
+	for (var i = 0; i < numEntries; i++){
+		entryRows[i].className = 'entry show'; 
+	}
+}
+
+function closeAllInfo(){
+	for (var i=0; i < numInfo; i++){
+		if (infoRows[i].className.indexOf('noshow') ==-1) {
+			infoRows[i].className = infoRows[i].className + ' noshow';
+		}
+	}
+}
+
+function testEvent(e){
+	if (!e) var e = window.event;
+	quickSearch(this);
+}
+
+function clearQS() {
+	qsfield.value = '';
+	quickSearch(qsfield);
+}
+
+function redoQS(){
+	showAll();
+	quickSearch(qsfield);
+}
+
+// Create Search Settings
+
+function toggleQSettingsDialog() {
+
+	var qssettings = document.getElementById('qssettings');
+	
+	if(qssettings.className.indexOf('active')==-1) {
+		qssettings.className = 'active';
+
+		if(absCheckBox && searchAbstract == true) { absCheckBox.checked = 'checked'; }
+		if(revCheckBox && searchReview == true) { revCheckBox.checked = 'checked'; }
+
+	} else {
+		qssettings.className= '';
+	}
+}
+
+function createQSettingsDialog(){
+	var qssettingslist = document.getElementById('qssettings').getElementsByTagName('ul')[0];
+	
+	if(numAbs!=0) {
+		var x = document.createElement('input');
+		x.id = "searchAbs";
+		x.type = "checkbox";
+		x.onclick = toggleQSetting;
+		var y = qssettingslist.appendChild(document.createElement('li')).appendChild(document.createElement('label'));
+		y.appendChild(x);
+		y.appendChild(document.createTextNode('search abstracts'));		
+	}
+	if(numRev!=0) {
+		var x = document.createElement('input');
+		x.id = "searchRev";
+		x.type = "checkbox";		
+		x.onclick = toggleQSetting;
+		var y = qssettingslist.appendChild(document.createElement('li')).appendChild(document.createElement('label'));		
+		y.appendChild(x);		
+		y.appendChild(document.createTextNode('search reviews'));
+	}
+		
+	// global variables
+	absCheckBox = document.getElementById('searchAbs');
+	revCheckBox = document.getElementById('searchRev');
+	
+	// show search settings
+	if(absCheckBox||revCheckBox) {
+		document.getElementById('qssettings').style.display = 'block';
+	}
+}
+
+function toggleQSetting() {
+	if(this.id=='searchAbs') { searchAbstract = !searchAbstract; }
+	if(this.id=='searchRev') { searchReview = !searchReview; }
+	redoQS()
+} 
+
+</script>
+<style type="text/css">
+body { background-color: white; font-family: "Trebuchet MS", Arial, sans-serif; font-size: 12px; line-height: 1.2; padding: 1em; color: #2E2E2E; }
+
+#qs { width: auto; border-style: solid; border-color: gray; border-width: 1px 1px 0px 1px; padding: 0.5em 0.5em; display:none; position:relative; }
+#qs form { padding: 0px; margin: 0px; }
+#qs form p { padding: 0px; margin: 0px; }
+
+.invalidsearch { background-color: red; }
+
+table { border: 1px gray solid; width: 100%; empty-cells: show; }
+th, td { border: 1px gray solid; padding: 0.5em; vertical-align: top;  }
+td { text-align: left; vertical-align: top; }
+th { background-color: #EFEFEF; }
+
+td a { color: navy; text-decoration: none; }
+td a:hover  { text-decoration: underline; }
+
+tr.noshow { display: none;}
+
+tr.highlight td { background-color: #F1F1F1; border-top: 2px black solid; font-weight: bold; }
+tr.abstract td, tr.review td, tr.bibtex td { background-color: #F1F1F1; border-bottom: 2px black solid; }
+tr.nextshow td { border-bottom: 1px gray solid; }
+
+tr.bibtex pre { width: 100%; overflow: auto;}
+
+p.infolinks { margin: 0.5em 0em 0em 0em; padding: 0px; }
+
+#qssettings { padding: 0.5em; position: absolute; top: 0.2em; right: 0.2em; border: 1px gray solid; background-color: white; display: none; }
+#qssettings p { font-weight: bold; cursor: pointer; }
+#qssettings ul { display: none; list-style-type: none; padding-left: 0; margin: 0; }
+#qssettings.active ul { display: block; }
+
+@media print {
+	p.infolinks, #qssettings, #qs { display: none !important; }
+	table { border-width: 0px; }
+	tr { page-break-inside: avoid; }
+	tr > * + * + * + * + * {display: none; }
+	thead tr::before { content: "Reference"; border: 1px gray solid; padding: 0.5em; vertical-align: top; font-weight: bold; text-align: center; display: table-cell; background-color: #EFEFEF; }
+	tr[id]::before { content: attr(id); display: table-cell; border: 1px gray solid; padding: 0.5em; vertical-align: top; font-style: italic; }
+}
+</style>
+</head>
+<body>
+
+<div id="qs">
+	<form action="">
+	<p>QuickSearch: <input type="text" name="qsfield" id="qsfield" autocomplete="off" title="Allows plain text as well as RegExp searches" /><input type="button" onclick="clearQS()" value="clear" />&nbsp; Number of matching entries: <span id="stat">0</span>.</p>
+	<div id="qssettings">
+		<p onclick="toggleQSettingsDialog()">Search Settings</p>
+		<ul></ul>
+	</div>
+	</form>
+</div>
+<table id="qstable" border="1">
+<thead><tr><th width="20%">Author</th><th width="30%">Title</th><th width="5%">Year</th><th width="30%">Journal/Proceedings</th><th width="10%">Reftype</th><th width="5%">DOI/URL</th></tr></thead>
+<tbody>
+
+<tr id="Aurangzebics2017" class="entry">
+	<td>Aurangzeb &amp; Eigenmann, R.</td>
+	<td>HiPA: History-based Piecewise Approximation for Functions <p class="infolinks">[<a href="javascript:toggleInfo('Aurangzebics2017','bibtex')">BibTeX</a>]</p></td>
+	<td>2017</td>
+	<td>ICS'17: Proceedings of the 31st International Conference on Supercomputing </td>
+	<td>inproceedings</td>
+	<td><a href="http://doi.acm.org/10.1145/3079079.3079107">DOI</a> </td>
+</tr>
+<tr id="bib_Aurangzebics2017" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DBLP:conf/ics/AurangzebE17,
+  author    = {Aurangzeb and
+               Rudolf Eigenmann},
+  title     = {HiPA: history-based piecewise approximation for functions},
+  booktitle = {Proceedings of the International Conference on Supercomputing, {ICS}
+               2017, Chicago, IL, USA, June 14-16, 2017},
+  pages     = {23:1--23:10},
+  year      = {2017},
+  crossref  = {DBLP:conf/ics/2017},
+  url       = {http://doi.acm.org/10.1145/3079079.3079107},
+  doi       = {10.1145/3079079.3079107},
+  timestamp = {Mon, 12 Jun 2017 15:42:58 +0200},
+  biburl    = {http://dblp.org/rec/bib/conf/ics/AurangzebE17},
+  bibsource = {dblp computer science bibliography, http://dblp.org}
+}
+</pre></td>
+</tr>
+
+<tr id="Aurangzebwapco2017" class="entry">
+	<td>Aurangzeb &amp; Eigenmann, R.</td>
+	<td>PROCsimate: A Scheme for Approximating Procedures with Dynamic Quality Monitoring and Result Guarantees <p class="infolinks">[<a href="javascript:toggleInfo('Aurangzebwapco2017','bibtex')">BibTeX</a>]</p></td>
+	<td>2017</td>
+	<td>WAPCO'17: 3rd Workshop on Approximate Computing, The 12th International Conference on High Performance and Embedded Architecture and Compilation (HiPEAC'17) </td>
+	<td>inproceedings</td>
+	<td><a href="https://wapco.e-ce.uth.gr/papers/SESSION1/paper_1_3.pdf">URL</a> </td>
+</tr>
+<tr id="bib_Aurangzebwapco2017" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{
+  author    = {Aurangzeb and
+               Rudolf Eigenmann},
+  title     = {PROCsimate: A Scheme for Approximating Procedures with Dynamic Quality Monitoring and Result Guarantees},
+  booktitle = {3rd Workshop on Approximate Computing, {WAPCO} 2017, Stockholm, Sweden, January 23-25, 2017},
+  year      = {2017},
+  url       = {https://wapco.e-ce.uth.gr/papers/SESSION1/paper_1_3.pdf},
+}
+</pre></td>
+</tr>
+
+<tr id="Aurangzeblcpc2016" class="entry">
+	<td>Aurangzeb &amp; Eigenmann, R.</td>
+	<td>Harnessing Parallelism in Multicore Systems to Expedite and Improve Function Approximation <p class="infolinks">[<a href="javascript:toggleInfo('Aurangzeblcpc2016','bibtex')">BibTeX</a>]</p></td>
+	<td>2016</td>
+	<td>LCPC'16: Proceedings of the 29th International Workshop on Languages and Compilers for Parallel Computing </td>
+	<td>inproceedings</td>
+	<td><a href="https://doi.org/10.1007/978-3-319-52709-3_7">DOI</a> </td>
+</tr>
+<tr id="bib_Aurangzeblcpc2016" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DBLP:conf/lcpc/AurangzebE16,
+  author    = {Aurangzeb and
+               Rudolf Eigenmann},
+  title     = {Harnessing Parallelism in Multicore Systems to Expedite and Improve
+               Function Approximation},
+  booktitle = {Languages and Compilers for Parallel Computing - 29th International
+               Workshop, {LCPC} 2016, Rochester, NY, USA, September 28-30, 2016,
+               Revised Papers},
+  pages     = {88--92},
+  year      = {2016},
+  crossref  = {DBLP:conf/lcpc/2016},
+  url       = {https://doi.org/10.1007/978-3-319-52709-3_7},
+  doi       = {10.1007/978-3-319-52709-3_7},
+  timestamp = {Wed, 17 May 2017 14:24:37 +0200},
+  biburl    = {http://dblp.org/rec/bib/conf/lcpc/AurangzebE16},
+  bibsource = {dblp computer science bibliography, http://dblp.org}
+}
+</pre></td>
+</tr>
+
+<tr id="Aurangzebwax2016" class="entry">
+	<td>Aurangzeb &amp; Eigenmann, R.</td>
+	<td>DOT APPROX: Making a Case for Dynamic Online Training for Function Approximation Techniques <p class="infolinks">[<a href="javascript:toggleInfo('Aurangzebwax2016','bibtex')">BibTeX</a>]</p></td>
+	<td>2016</td>
+	<td>WAX'16: Workshop on Approximate Computing Across the Stack, International Conference on Architectural Support for Programming Languages and Operating Systems (ASPLOS'16) </td>
+	<td>inproceedings</td>
+	<td><a href="http://approximate.computer/wax2016/papers/aurangzeb.pdf">URL</a> </td>
+</tr>
+<tr id="bib_Aurangzebwax2016" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{
+  author    = {Aurangzeb and
+               Rudolf Eigenmann},
+  title     = {DOT APPROX: Making a Case for Dynamic Online Training for Function Approximation Techniques},
+  booktitle = {Workshop on Approximate Computing Across the Stack, {WAX} 2016, Atlanta, GA, USA, April 2-6, 2016},
+  year      = {2016},
+  url       = {http://approximate.computer/wax2016/papers/aurangzeb.pdf},
+}
+</pre></td>
+</tr>
+
+<tr id="Aurangzebwapco2016" class="entry">
+	<td>Aurangzeb &amp; Eigenmann, R.</td>
+	<td>History-based Piecewise Approximation Scheme for Procedures <p class="infolinks">[<a href="javascript:toggleInfo('Aurangzebwapco2016','bibtex')">BibTeX</a>]</p></td>
+	<td>2016</td>
+	<td>WAPCO'16: 2nd Workshop on Approximate Computing, The 11th International Conference on High Performance and Embedded Architecture and Compilation (HiPEAC'16) </td>
+	<td>inproceedings</td>
+	<td><a href="https://wapco.e-ce.uth.gr/2016/papers/SESSION3/wapco2016_3_2.pdf">URL</a> </td>
+</tr>
+<tr id="bib_Aurangzebwapco2016" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{
+  author    = {Aurangzeb and
+               Rudolf Eigenmann},
+  title     = {History-based Piecewise Approximation Scheme for Procedures},
+  booktitle = {2nd Workshop on Approximate Computing, {WAPCO} 2016, Prague, Czech Republic, January 18-20, 2016},
+  year      = {2016},
+  url       = {https://wapco.e-ce.uth.gr/2016/papers/SESSION3/wapco2016_3_2.pdf},
+}
+</pre></td>
+</tr>
+
+<tr id="Psakdhna2015" class="entry">
+	<td>Sakdhnagool, P., Sabne, A. &amp; Eigenmann, R.</td>
+	<td>HYDRA : Extending Shared Address Programming for Accelerator Clusters <p class="infolinks">[<a href="javascript:toggleInfo('Psakdhna2015','bibtex')">BibTeX</a>]</p></td>
+	<td>2015</td>
+	<td>LCPC'15: Proceedings of the 28th International Workshop on Languages and Compilers for Parallel Computing </td>
+	<td>inproceedings</td>
+	<td><a href="http://dx.doi.org/10.1007/978-3-319-29778-1_9">DOI</a> </td>
+</tr>
+<tr id="bib_Psakdhna2015" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DBLP:conf/lcpc/SakdhnagoolSE15,
+  author    = {Putt Sakdhnagool and
+               Amit Sabne and
+               Rudolf Eigenmann},
+  title     = {{HYDRA} : Extending Shared Address Programming for Accelerator Clusters},
+  booktitle = {Languages and Compilers for Parallel Computing - 28th International
+               Workshop, {LCPC} 2015, Raleigh, NC, USA, September 9-11, 2015, Revised
+               Selected Papers},
+  pages     = {140--155},
+  year      = {2015},
+  crossref  = {DBLP:conf/lcpc/2015},
+  url       = {http://dx.doi.org/10.1007/978-3-319-29778-1_9},
+  doi       = {10.1007/978-3-319-29778-1_9},
+  timestamp = {Mon, 22 Feb 2016 14:08:35 +0100},
+  biburl    = {http://dblp.uni-trier.de/rec/bib/conf/lcpc/SakdhnagoolSE15},
+  bibsource = {dblp computer science bibliography, http://dblp.org}
+}
+</pre></td>
+</tr>
+
+<tr id="Sabne2015" class="entry">
+	<td>Sabne, A., Sakdhnagool, P. &amp; Eigenmann, R.</td>
+	<td>HeteroDoop: A MapReduce Programming System for Accelerator Clusters <p class="infolinks">[<a href="javascript:toggleInfo('Sabne2015','bibtex')">BibTeX</a>]</p></td>
+	<td>2015</td>
+	<td>Proceedings of the 24th ACM International Symposium on High-Performance Parallel and Distributed Computing, pp. 235-246&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://dx.doi.org/10.1145/2749246.2749261">DOI</a> <a href="http://engineering.purdue.edu/paramnt/publications/heteroDoop.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_Sabne2015" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{Sabne2015,
+ author = {Sabne, Amit and Sakdhnagool, Putt and Eigenmann, Rudolf},
+ title = {HeteroDoop: A MapReduce Programming System for Accelerator Clusters},
+ booktitle = {Proceedings of the 24th International Symposium on High-Performance Parallel and Distributed Computing},
+ series = {HPDC '15},
+ year = {2015},
+ isbn = {978-1-4503-3550-8},
+ location = {Portland, Oregon, USA},
+ pages = {235--246},
+ numpages = {12},
+ url = {http://doi.acm.org/10.1145/2749246.2749261},
+ doi = {10.1145/2749246.2749261},
+ acmid = {2749261},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+ keywords = {accelerators, distributed frameworks, mapreduce, scheduling, source-to-source translation},
+} 
+</pre></td>
+</tr>
+
+<tr id="Sabne2013" class="entry">
+	<td>Sabne, A., Sakdhnagool, P. &amp; Eigenmann, R.</td>
+	<td>Scaling large-data computations on multi-GPU accelerators <p class="infolinks">[<a href="javascript:toggleInfo('Sabne2013','bibtex')">BibTeX</a>]</p></td>
+	<td>2013</td>
+	<td>Proceedings of the 27th international ACM conference on International conference on supercomputing, pp. 443-454&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://dx.doi.org/10.1145/2464996.2465023">DOI</a> <a href="http://engineering.purdue.edu/paramnt/publications/ics41-sbane.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_Sabne2013" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{Sabne2013,
+  author = {Sabne, Amit and Sakdhnagool, Putt and Eigenmann, Rudolf},
+  title = {Scaling large-data computations on multi-GPU accelerators},
+  booktitle = {Proceedings of the 27th international ACM conference on International conference on supercomputing},
+  publisher = {ACM},
+  year = {2013},
+  pages = {443--454},
+  url = {http://engineering.purdue.edu/paramnt/publications/ics41-sbane.pdf},
+  doi = {http://dx.doi.org/10.1145/2464996.2465023}
+}
+</pre></td>
+</tr>
+<tr id="CETUS_IJPP12" class="entry">
+	<td>Bae, H., Mustafa, D., Lee, J.-W., Aurangzeb, Lin, H., Dave, C., Eigenmann, R. &amp; Midkiff, S.</td>
+	<td>The Cetus Source-to-Source Compiler Infrastructure: Overview and Evaluation <p class="infolinks">[<a href="javascript:toggleInfo('CETUS_IJPP12','bibtex')">BibTeX</a>]</p></td>
+	<td>2012</td>
+	<td>International Journal of Parallel Programming, pp. 1-15&nbsp;</td>
+	<td>article</td>
+	<td><a href="http://dx.doi.org/10.1007/s10766-012-0211-z">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_CETUS_IJPP12" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@article{CETUS_IJPP12,
+  author = {Bae, Hansang and Mustafa, Dheya and Lee, Jae-Woo and Aurangzeb, and Lin, Hao and Dave, Chirag and Eigenmann, Rudolf and Midkiff, Samuel},
+  title = {The Cetus Source-to-Source Compiler Infrastructure: Overview and Evaluation},
+  journal = {International Journal of Parallel Programming},
+  publisher = {Springer Netherlands},
+  year = {2012},
+  pages = {1-15},
+  note = {10.1007/s10766-012-0211-z},
+  url = {http://dx.doi.org/10.1007/s10766-012-0211-z}
+}
+</pre></td>
+</tr>
+<tr id="Islam:2012" class="entry">
+	<td>Islam, T.Z., Mohror, K., Bagchi, S., Moody, A., de Supinski, B.R. &amp; Eigenmann, R.</td>
+	<td>McrEngine: A Scalable Checkpointing System Using Data-Aware Aggregation And Compression <p class="infolinks">[<a href="javascript:toggleInfo('Islam:2012','bibtex')">BibTeX</a>]</p></td>
+	<td>2012</td>
+	<td>SC'12: Proceedings of the International Conference on High Performance Computing, Networking, Storage and Analysis, pp. 17:1-17:11&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://dl.acm.org/citation.cfm?id=2388996.2389020">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_Islam:2012" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{Islam:2012,
+  author = {Islam, Tanzima Zerin and Mohror, Kathryn and Bagchi, Saurabh and Moody, Adam and de Supinski, Bronis R. and Eigenmann, Rudolf},
+  title = {McrEngine: A Scalable Checkpointing System Using Data-Aware Aggregation And Compression},
+  booktitle = {SC'12: Proceedings of the International Conference on High Performance Computing, Networking, Storage and Analysis},
+  publisher = {IEEE Computer Society Press},
+  year = {2012},
+  pages = {17:1--17:11},
+  url = {http://dl.acm.org/citation.cfm?id=2388996.2389020}
+}
+</pre></td>
+</tr>
+<tr id="kwon:2012" class="entry">
+	<td>Kwon, O., Jubair, F., Eigenmann, R. &amp; Midkiff, S.</td>
+	<td>A Hybrid Approach of OpenMP for Clusters <p class="infolinks">[<a href="javascript:toggleInfo('kwon:2012','bibtex')">BibTeX</a>]</p></td>
+	<td>2012</td>
+	<td>Proceedings of the 17th ACM symposium on Principles and practice of parallel programming&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/ppopp12.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_kwon:2012" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{kwon:2012,
+  author = {Kwon, Okwan and Jubair, Fahed and Eigenmann, Rudolf and Midkiff, Samuel},
+  title = {A Hybrid Approach of OpenMP for Clusters},
+  booktitle = {Proceedings of the 17th ACM symposium on Principles and practice of parallel programming},
+  year = {2012},
+  url = {http://engineering.purdue.edu/paramnt/publications/ppopp12.pdf}
+}
+</pre></td>
+</tr>
+<tr id="OpenMPC2012" class="entry">
+	<td>Lee, S. &amp; Eigenmann, R.</td>
+	<td>OpenMPC: Extended OpenMP for Efficient Programming and Tuning on GPUs <p class="infolinks">[<a href="javascript:toggleInfo('OpenMPC2012','bibtex')">BibTeX</a>]</p></td>
+	<td>2012</td>
+	<td>International Journal of Computational Science and Engineering&nbsp;</td>
+	<td>article</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/OpenMPC_final.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_OpenMPC2012" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@article{OpenMPC2012,
+  author = {Seyong Lee and Rudolf Eigenmann},
+  title = {OpenMPC: Extended OpenMP for Efficient Programming and Tuning on GPUs},
+  journal = {International Journal of Computational Science and Engineering},
+  year = {2012},
+  url = {http://engineering.purdue.edu/paramnt/publications/OpenMPC_final.pdf}
+}
+</pre></td>
+</tr>
+<tr id="DHEYASC12" class="entry">
+	<td>Mustafa, D. &amp; Eigenmann, R.</td>
+	<td>Portable Section-level Tuning of Compiler Parallelized Applications <p class="infolinks">[<a href="javascript:toggleInfo('DHEYASC12','bibtex')">BibTeX</a>]</p></td>
+	<td>2012</td>
+	<td>SC'12: Proceedings of the 2012 ACM/IEEE conference on Supercomputing&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/SC12_DHEYA.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_DHEYASC12" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DHEYASC12,
+  author = {Dheya Mustafa and Rudolf Eigenmann},
+  title = {Portable Section-level Tuning of Compiler Parallelized Applications},
+  booktitle = {SC'12: Proceedings of the 2012 ACM/IEEE conference on Supercomputing},
+  publisher = {IEEE press},
+  year = {2012},
+  url = {http://engineering.purdue.edu/paramnt/publications/SC12_DHEYA.pdf}
+}
+</pre></td>
+</tr>
+<tr id="amit12" class="entry">
+	<td>Sabne, A., Sakdhnagool, P. &amp; Eigenmann, R.</td>
+	<td>Effects of Compiler Optimizations in OpenMP to CUDA Translation <p class="infolinks">[<a href="javascript:toggleInfo('amit12','bibtex')">BibTeX</a>]</p></td>
+	<td>2012</td>
+	<td>Proc. of the International Workshop on OpenMP, IWOMP&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/iwomp12.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_amit12" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{amit12,
+  author = {Amit Sabne and Putt Sakdhnagool and Rudolf Eigenmann},
+  title = {Effects of Compiler Optimizations in OpenMP to CUDA Translation},
+  booktitle = {Proc. of the International Workshop on OpenMP, IWOMP},
+  year = {2012},
+  url = {http://engineering.purdue.edu/paramnt/publications/iwomp12.pdf}
+}
+</pre></td>
+</tr>
+<tr id="polaris11" class="entry">
+	<td>Eigenmann, R.</td>
+	<td>Polaris <p class="infolinks">[<a href="javascript:toggleInfo('polaris11','bibtex')">BibTeX</a>]</p></td>
+	<td>2011</td>
+	<td>Encyclopedia of Parallel Computing&nbsp;</td>
+	<td>article</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/polaris-nofront.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_polaris11" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@article{polaris11,
+  author = {Rudolf Eigenmann},
+  title = {Polaris},
+  journal = {Encyclopedia of Parallel Computing},
+  publisher = { Springer; New York},
+  year = {2011},
+  url = {http://engineering.purdue.edu/paramnt/publications/polaris-nofront.pdf}
+}
+</pre></td>
+</tr>
+<tr id="eigenmann2011computational" class="entry">
+	<td>Eigenmann, R. &amp; Irfanoglu, A.</td>
+	<td>Computational Earthquake and Tsunami Research <p class="infolinks">[<a href="javascript:toggleInfo('eigenmann2011computational','bibtex')">BibTeX</a>]</p></td>
+	<td>2011</td>
+	<td>Computing in Science &amp; Engineering<br/>Vol. 13(4), pp. 11-13&nbsp;</td>
+	<td>article</td>
+	<td><a href="http://www.computer.org/portal/web/csdl/abs/html/mags/cs/2011/04/mcs2011040011.htm">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_eigenmann2011computational" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@article{eigenmann2011computational,
+  author = {Eigenmann, R. and Irfanoglu, A.},
+  title = {Computational Earthquake and Tsunami Research},
+  journal = {Computing in Science &amp; Engineering},
+  publisher = {IEEE},
+  year = {2011},
+  volume = {13},
+  number = {4},
+  pages = {11--13},
+  url = {http://www.computer.org/portal/web/csdl/abs/html/mags/cs/2011/04/mcs2011040011.htm}
+}
+</pre></td>
+</tr>
+<tr id="hacker2011neeshub" class="entry">
+	<td>Hacker, T., Eigenmann, R., Bagchi, S., Irfanoglu, A., Pujol, S., Catlin, A. &amp; Rathje, E.</td>
+	<td>The NEEShub Cyberinfrastructure for Earthquake Engineering <p class="infolinks">[<a href="javascript:toggleInfo('hacker2011neeshub','bibtex')">BibTeX</a>]</p></td>
+	<td>2011</td>
+	<td>Computing in Science &amp; Engineering<br/>Vol. 13(4), pp. 67-78&nbsp;</td>
+	<td>article</td>
+	<td><a href="http://scitation.aip.org/getabs/servlet/GetabsServlet?prog=normal&id=CSENFA000013000004000067000001&idtype=cvips&gifs=yes&ref=no">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_hacker2011neeshub" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@article{hacker2011neeshub,
+  author = {Hacker, T.J. and Eigenmann, R. and Bagchi, S. and Irfanoglu, A. and Pujol, S. and Catlin, A. and Rathje, E.},
+  title = {The NEEShub Cyberinfrastructure for Earthquake Engineering},
+  journal = {Computing in Science &amp; Engineering},
+  publisher = {IEEE},
+  year = {2011},
+  volume = {13},
+  number = {4},
+  pages = {67--78},
+  url = {http://scitation.aip.org/getabs/servlet/GetabsServlet?prog=normal&amp;id=CSENFA000013000004000067000001&amp;idtype=cvips&amp;gifs=yes&amp;ref=no}
+}
+</pre></td>
+</tr>
+<tr id="leee222" class="entry">
+	<td>Lee, S.</td>
+	<td>TOWARD COMPILER-DRIVEN ADAPTIVE EXECUTION AND ITSAPPLICATION TO GPU ARCHITECTURES <p class="infolinks">[<a href="javascript:toggleInfo('leee222','bibtex')">BibTeX</a>]</p></td>
+	<td>2011</td>
+	<td><i>School</i>: Purdue University, School of Electrical and Computer Engineering&nbsp;</td>
+	<td>phdthesis</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/PhDThesis_SYLee.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_leee222" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@phdthesis{leee222,
+  author = {Seyong Lee},
+  title = {TOWARD COMPILER-DRIVEN ADAPTIVE EXECUTION AND ITSAPPLICATION TO GPU ARCHITECTURES},
+  school = {Purdue University, School of Electrical and Computer Engineering},
+  year = {2011},
+  url = {http://engineering.purdue.edu/paramnt/publications/PhDThesis_SYLee.pdf}
+}
+</pre></td>
+</tr>
+<tr id="DHEYA11" class="entry">
+	<td>Mustafa, D., Auranzeb &amp; Eigenmann, R.</td>
+	<td>Performance Analysis and Tuning of Automatically Parallelized OpenMP Applications <p class="infolinks">[<a href="javascript:toggleInfo('DHEYA11','bibtex')">BibTeX</a>]</p></td>
+	<td>2011</td>
+	<td><br/>Vol. 6665Proc. of the International Workshop on OpenMP, IWOMP, pp. 150-164&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/IWOMPDheya.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_DHEYA11" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DHEYA11,
+  author = {Dheya Mustafa and Auranzeb and Rudolf Eigenmann},
+  title = {Performance Analysis and Tuning of Automatically Parallelized OpenMP Applications},
+  booktitle = {Proc. of the International Workshop on OpenMP, IWOMP},
+  publisher = {Springer Verlag},
+  year = {2011},
+  volume = {6665},
+  pages = {150--164},
+  url = {http://engineering.purdue.edu/paramnt/publications/IWOMPDheya.pdf}
+}
+</pre></td>
+</tr>
+<tr id="dheyaTune11" class="entry">
+	<td>Mustafa, D. &amp; Eigenmann, R.</td>
+	<td>Window-based Empirical Tuning of Parallelized Applications <p class="infolinks">[<a href="javascript:toggleInfo('dheyaTune11','bibtex')">BibTeX</a>]</p></td>
+	<td>2011</td>
+	<td>(ECE-HPCLab-11201)&nbsp;</td>
+	<td>techreport</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/technicalreport11.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_dheyaTune11" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@techreport{dheyaTune11,
+  author = {Dheya Mustafa and Rudolf Eigenmann},
+  title = {Window-based Empirical Tuning of Parallelized Applications},
+  year = {2011},
+  number = {ECE-HPCLab-11201},
+  url = {http://engineering.purdue.edu/paramnt/publications/technicalreport11.pdf}
+}
+</pre></td>
+</tr>
+<tr id="Okwan11" class="entry">
+	<td>Kwon, O., Jubair, F., Min, S.-J., Bae, H., Eigenmann, R. &amp; Midkiff, S.</td>
+	<td>Automatic Scaling of OpenMP Beyond Shared Memory <p class="infolinks">[<a href="javascript:toggleInfo('Okwan11','bibtex')">BibTeX</a>]</p></td>
+	<td>2011</td>
+	<td>LCPC '11: Proceedings of the 24th International Workshop on Languages and Compilers for Parallel Computing&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/lcpc11-okwan.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_Okwan11" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{Okwan11,
+  author = {Okwan Kwon and Fahed Jubair and Seung-Jai Min and Hansang Bae and Rudolf Eigenmann and Samuel Midkiff},
+  title = {Automatic Scaling of OpenMP Beyond Shared Memory},
+  booktitle = {LCPC '11: Proceedings of the 24th International Workshop on Languages and Compilers for Parallel Computing},
+  year = {2011},
+  url = {http://engineering.purdue.edu/paramnt/publications/lcpc11-okwan.pdf}
+}
+</pre></td>
+</tr>
+<tr id="cee10" class="entry">
+	<td>Eigenmann, R., Hacker, T. &amp; Rathje, E.</td>
+	<td>NEES CYBERINFRASTRUCTURE: A FOUNDATION FOR INNOVATIVE RESEARCH AND EDUCATION <p class="infolinks">[<a href="javascript:toggleInfo('cee10','bibtex')">BibTeX</a>]</p></td>
+	<td>2010</td>
+	<td>U.S./Canadian Conference on Earthquake Engineering, Toronto, Canada&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/cee10-cyberinfrastructureV6.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_cee10" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{cee10,
+  author = {R. Eigenmann and T. Hacker and E. Rathje},
+  title = {NEES CYBERINFRASTRUCTURE: A FOUNDATION FOR INNOVATIVE RESEARCH AND EDUCATION},
+  booktitle = {U.S./Canadian Conference on Earthquake Engineering, Toronto, Canada},
+  year = {2010},
+  url = {http://engineering.purdue.edu/paramnt/publications/cee10-cyberinfrastructureV6.pdf}
+}
+</pre></td>
+</tr>
+<tr id="LeeSC10" class="entry">
+	<td>Lee, S. &amp; Eigenmann, R.</td>
+	<td>OpenMPC: Extended OpenMP Programming and Tuning for GPUs <p class="infolinks">[<a href="javascript:toggleInfo('LeeSC10','bibtex')">BibTeX</a>]</p></td>
+	<td>2010</td>
+	<td>SC'10: Proceedings of the 2010 ACM/IEEE conference on Supercomputing, Won the Best Student Paper award&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/SC10_LE.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_LeeSC10" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{LeeSC10,
+  author = {Seyong Lee and Rudolf Eigenmann},
+  title = {OpenMPC: Extended OpenMP Programming and Tuning for GPUs},
+  booktitle = {SC'10: Proceedings of the 2010 ACM/IEEE conference on Supercomputing, Won the Best Student Paper award},
+  publisher = {IEEE press},
+  year = {2010},
+  url = {http://engineering.purdue.edu/paramnt/publications/SC10_LE.pdf}
+}
+</pre></td>
+</tr>
+<tr id="SEAOC10" class="entry">
+	<td>Ramirez, J., Anagnos, T. &amp; Eigenmann, R.</td>
+	<td>The George E. Brown, Jr. Network for Earthquake Engineering Simulation (NEES): A Resource for Structural Engineers <p class="infolinks">[<a href="javascript:toggleInfo('SEAOC10','bibtex')">BibTeX</a>]</p></td>
+	<td>2010</td>
+	<td>Structural Engineers of California Convention, Indian Wells, California&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/SEAOC_NEES.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_SEAOC10" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{SEAOC10,
+  author = {Julio Ramirez and Thalia Anagnos and Rudolf Eigenmann},
+  title = {The George E. Brown, Jr. Network for Earthquake Engineering Simulation (NEES): A Resource for Structural Engineers},
+  booktitle = {Structural Engineers of California Convention, Indian Wells, California},
+  year = {2010},
+  url = {http://engineering.purdue.edu/paramnt/publications/SEAOC_NEES.pdf}
+}
+</pre></td>
+</tr>
+<tr id="DaBaIEEE09" class="entry">
+	<td>Dave, C., Bae, H., Min, S.-J., Lee, S., Eigenmann, R. &amp; Midkiff, S.</td>
+	<td>Cetus: A Source-to-Source Compiler Infrastructure for Multicores <p class="infolinks">[<a href="javascript:toggleInfo('DaBaIEEE09','bibtex')">BibTeX</a>]</p></td>
+	<td>2009</td>
+	<td>IEEE Computer<br/>Vol. 42(12), pp. 36-42&nbsp;</td>
+	<td>article</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/ieeecomputer-Cetus-09.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_DaBaIEEE09" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@article{DaBaIEEE09,
+  author = {Chirag Dave and Hansang Bae and Seung-Jai Min and Seyong Lee and Rudolf Eigenmann and Samuel Midkiff},
+  title = {Cetus: A Source-to-Source Compiler Infrastructure for Multicores},
+  journal = {IEEE Computer},
+  publisher = {IEEE},
+  year = {2009},
+  volume = {42},
+  number = {12},
+  pages = {36--42},
+  url = {http://engineering.purdue.edu/paramnt/publications/ieeecomputer-Cetus-09.pdf}
+}
+</pre></td>
+</tr>
+<tr id="islam2009falcon" class="entry">
+	<td>Islam, T., Bagchi, S. &amp; Eigenmann, R.</td>
+	<td>FALCON: A System for Reliable Checkpoint Recovery in Shared Grid Environments <p class="infolinks">[<a href="javascript:toggleInfo('islam2009falcon','bibtex')">BibTeX</a>]</p></td>
+	<td>2009</td>
+	<td>Proceedings of the Conference on High Performance Computing Networking, Storage and Analysis, pp. 1-12&nbsp;</td>
+	<td>conference</td>
+	<td><a href="http://portal.acm.org/citation.cfm?id=1654059.1654110&dl=ACM&coll=ACM">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_islam2009falcon" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@conference{islam2009falcon,
+  author = {Islam, T.Z. and Bagchi, S. and Eigenmann, R.},
+  title = {FALCON: A System for Reliable Checkpoint Recovery in Shared Grid Environments},
+  booktitle = {Proceedings of the Conference on High Performance Computing Networking, Storage and Analysis},
+  year = {2009},
+  pages = {1--12},
+  url = {http://portal.acm.org/citation.cfm?id=1654059.1654110&amp;dl=ACM&amp;coll=ACM}
+}
+</pre></td>
+</tr>
+<tr id="DaEi09" class="entry">
+	<td>Dave, C. &amp; Eigenmann, R.</td>
+	<td>Automatically Tuning Parallel and Parallelized Programs <p class="infolinks">[<a href="javascript:toggleInfo('DaEi09','bibtex')">BibTeX</a>]</p></td>
+	<td>2009</td>
+	<td>LCPC '09: Proceedings of the 22nd International Workshop on Languages and Compilers for Parallel Computing&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/lcpc09-daei.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_DaEi09" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DaEi09,
+  author = {Chirag Dave and Rudolf Eigenmann},
+  title = {Automatically Tuning Parallel and Parallelized Programs},
+  booktitle = {LCPC '09: Proceedings of the 22nd International Workshop on Languages and Compilers for Parallel Computing},
+  year = {2009},
+  url = {http://engineering.purdue.edu/paramnt/publications/lcpc09-daei.pdf}
+}
+</pre></td>
+</tr>
+<tr id="LeePPOPP09" class="entry">
+	<td>Lee, S., Min, S.-J. &amp; Eigenmann, R.</td>
+	<td>OpenMP to GPGPU: A Compiler Framework for Automatic Translation and Optimization <p class="infolinks">[<a href="javascript:toggleInfo('LeePPOPP09','bibtex')">BibTeX</a>]</p></td>
+	<td>2009</td>
+	<td>PPoPP '09: Proceedings of the 14th ACM SIGPLAN symposium on Principles and practice of parallel programming, pp. 101-110&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/PPOPP09-LME.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_LeePPOPP09" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{LeePPOPP09,
+  author = {Seyong Lee and Seung-Jai Min and Rudolf Eigenmann},
+  title = {OpenMP to GPGPU: A Compiler Framework for Automatic Translation and Optimization},
+  booktitle = {PPoPP '09: Proceedings of the 14th ACM SIGPLAN symposium on Principles and practice of parallel programming},
+  publisher = {ACM},
+  year = {2009},
+  pages = {101--110},
+  url = {http://engineering.purdue.edu/paramnt/publications/PPOPP09-LME.pdf}
+}
+</pre></td>
+</tr>
+<tr id="BBD09" class="entry">
+	<td>Bae, H., Bachega, L., Dave, C., Lee, S.-I., Lee, S., Min, S.-J., Eigenmann, R. &amp; Midkiff, S.</td>
+	<td>Cetus: A Source-to-Source Compiler Infrastructure for Multicores <p class="infolinks">[<a href="javascript:toggleInfo('BBD09','bibtex')">BibTeX</a>]</p></td>
+	<td>2009</td>
+	<td>Proc. of the 14th Int'l Workshop on Compilers for Parallel Computing (CPC'09), pp. 14 pages&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/CPC09.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_BBD09" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{BBD09,
+  author = {Hansang Bae and Leonardo Bachega and Chirag Dave and Sang-Ik Lee and Seyong Lee and Seung-Jai Min and Rudolf Eigenmann and Samuel Midkiff},
+  title = {Cetus: A Source-to-Source Compiler Infrastructure for Multicores},
+  booktitle = {Proc. of the 14th Int'l Workshop on Compilers for Parallel Computing (CPC'09)},
+  year = {2009},
+  pages = {14 pages},
+  url = {http://engineering.purdue.edu/paramnt/publications/CPC09.pdf}
+}
+</pre></td>
+</tr>
+<tr id="ArEi08" class="entry">
+	<td>Armstrong, B. &amp; Eigenmann, R.</td>
+	<td>Application of Automatic Parallelization to Modern Challenges of Scientific Computing Industries <p class="infolinks">[<a href="javascript:toggleInfo('ArEi08','bibtex')">BibTeX</a>]</p></td>
+	<td>2008</td>
+	<td>Proc. of the International Conference on Parallel Processing&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/ArEi08.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_ArEi08" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{ArEi08,
+  author = {Brian Armstrong and Rudolf Eigenmann},
+  title = {Application of Automatic Parallelization to Modern Challenges of Scientific Computing Industries},
+  booktitle = {Proc. of the International Conference on Parallel Processing},
+  year = {2008},
+  url = {http://engineering.purdue.edu/paramnt/publications/ArEi08.pdf}
+}
+</pre></td>
+</tr>
+<tr id="BaEi08" class="entry">
+	<td>Basumallik, A. &amp; Eigenmann, R.</td>
+	<td>Incorporation of OpenMP Memory Consistency into Conventional Dataflow Analysis <p class="infolinks">[<a href="javascript:toggleInfo('BaEi08','bibtex')">BibTeX</a>]</p></td>
+	<td>2008</td>
+	<td><br/>Vol. 5004Proc. of the International Workshop on OpenMP, IWOMP&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/IWOMP08-BE.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_BaEi08" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{BaEi08,
+  author = {Ayon Basumallik and Rudolf Eigenmann},
+  title = {Incorporation of OpenMP Memory Consistency into Conventional Dataflow Analysis},
+  booktitle = {Proc. of the International Workshop on OpenMP, IWOMP},
+  publisher = {Springer Verlag},
+  year = {2008},
+  volume = {5004},
+  url = {http://engineering.purdue.edu/paramnt/publications/IWOMP08-BE.pdf}
+}
+</pre></td>
+</tr>
+<tr id="iwomp08" class="entry">
+	<td>Eigenmann, R. &amp; de Supinski, B.R.</td>
+	<td>OpenMP in a New Era of Parallelism -- Proc. of the International Workshop on OpenMP, IWOMP <p class="infolinks">[<a href="javascript:toggleInfo('iwomp08','bibtex')">BibTeX</a>]</p></td>
+	<td>2008</td>
+	<td><br/>Vol. 5004&nbsp;</td>
+	<td>book</td>
+	<td><a href="http://www.springerlink.com/content/978-3-540-79560-5/">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_iwomp08" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@book{iwomp08,
+  author = {Rudolf Eigenmann and Bronis R. de Supinski},
+  title = {OpenMP in a New Era of Parallelism -- Proc. of the International Workshop on OpenMP, IWOMP},
+  publisher = {Springer Verlag},
+  year = {2008},
+  volume = {5004},
+  note = {ISBN: 978-3-540-79560-5},
+  url = {http://www.springerlink.com/content/978-3-540-79560-5/}
+}
+</pre></td>
+</tr>
+<tr id="Lee-ICS08" class="entry">
+	<td>Lee, S. &amp; Eigenmann, R.</td>
+	<td>Adaptive Runtime Tuning of Parallel Sparse Matrix-Vector Multiplication on Distributed Memory Systems <p class="infolinks">[<a href="javascript:toggleInfo('Lee-ICS08','bibtex')">BibTeX</a>]</p></td>
+	<td>2008</td>
+	<td>ICS '08: Proceedings of the 22nd annual international conference on Supercomputing, pp. 195-204&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/ICS08_LE.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_Lee-ICS08" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{Lee-ICS08,
+  author = {Seyong Lee and Rudolf Eigenmann},
+  title = {Adaptive Runtime Tuning of Parallel Sparse Matrix-Vector Multiplication on Distributed Memory Systems},
+  booktitle = {ICS '08: Proceedings of the 22nd annual international conference on Supercomputing},
+  publisher = {ACM},
+  year = {2008},
+  pages = {195--204},
+  url = {http://engineering.purdue.edu/paramnt/publications/ICS08_LE.pdf}
+}
+</pre></td>
+</tr>
+<tr id="SMIN-ICS08" class="entry">
+	<td>Min, S.-J. &amp; Eigenmann, R.</td>
+	<td>Optimizing Irregular Shared-Memory Applications for Clusters <p class="infolinks">[<a href="javascript:toggleInfo('SMIN-ICS08','bibtex')">BibTeX</a>]</p></td>
+	<td>2008</td>
+	<td>Proc. of the ACM International Conference on Supercomputing, pp. 256-265&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/ICS08-smin.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_SMIN-ICS08" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{SMIN-ICS08,
+  author = {Seung-Jai Min and Rudolf Eigenmann},
+  title = {Optimizing Irregular Shared-Memory Applications for Clusters},
+  booktitle = {Proc. of the ACM International Conference on Supercomputing},
+  publisher = {ACM},
+  year = {2008},
+  pages = {256--265},
+  url = {http://engineering.purdue.edu/paramnt/publications/ICS08-smin.pdf}
+}
+</pre></td>
+</tr>
+<tr id="PaEi08" class="entry">
+	<td>Pan, Z. &amp; Eigenmann, R.</td>
+	<td>PEAK---a fast and effective performance tuning system via compiler optimization orchestration <p class="infolinks">[<a href="javascript:toggleInfo('PaEi08','bibtex')">BibTeX</a>]</p></td>
+	<td>2008</td>
+	<td>ACM Trans. Program. Lang. Syst.<br/>Vol. 30(3), pp. 1-43&nbsp;</td>
+	<td>article</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/PaEi08.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_PaEi08" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@article{PaEi08,
+  author = {Zhelong Pan and Rudolf Eigenmann},
+  title = {PEAK---a fast and effective performance tuning system via compiler optimization orchestration},
+  journal = {ACM Trans. Program. Lang. Syst.},
+  publisher = {ACM},
+  year = {2008},
+  volume = {30},
+  number = {3},
+  pages = {1--43},
+  url = {http://engineering.purdue.edu/paramnt/publications/PaEi08.pdf}
+}
+</pre></td>
+</tr>
+<tr id="SBA+08" class="entry">
+	<td>Sayeed, M., Bae, H., Zheng, Y., Armstrong, B., Eigenmann, R. &amp; Saied, F.</td>
+	<td>Measuring High-Performance Computing With Real Applications <p class="infolinks">[<a href="javascript:toggleInfo('SBA+08','bibtex')">BibTeX</a>]</p></td>
+	<td>2008</td>
+	<td>IEEE Computation in Science and Engineering<br/>Vol. 10(4), pp. 60-69&nbsp;</td>
+	<td>article</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/SBA+08.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_SBA+08" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@article{SBA+08,
+  author = {Mohamed Sayeed and Hansang Bae and Yili Zheng and Brian Armstrong and Rudolf Eigenmann and Faisal Saied},
+  title = {Measuring High-Performance Computing With Real Applications},
+  journal = {IEEE Computation in Science and Engineering},
+  year = {2008},
+  volume = {10},
+  number = {4},
+  pages = {60--69},
+  url = {http://engineering.purdue.edu/paramnt/publications/SBA+08.pdf}
+}
+</pre></td>
+</tr>
+<tr id="KSME08" class="entry">
+	<td>Kim, J.-K., Siegel, H.J., Maciejewski, A.A. &amp; Eigenmann, R.</td>
+	<td>Dynamic Resource Management in Energy-Constrained Heterogeneous Computing Systems Using Voltage Scaling <p class="infolinks">[<a href="javascript:toggleInfo('KSME08','bibtex')">BibTeX</a>]</p></td>
+	<td>2008</td>
+	<td>IEEE Transactions on Parallel and Distributed Systems<br/>Vol. 19(11), pp. 1445-1457&nbsp;</td>
+	<td>article</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/KSME08.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_KSME08" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@article{KSME08,
+  author = {Jong-Kook Kim and Howard Jay Siegel and Anthony A. Maciejewski and Rudolf Eigenmann},
+  title = {Dynamic Resource Management in Energy-Constrained Heterogeneous Computing Systems Using Voltage Scaling},
+  journal = {IEEE Transactions on Parallel and Distributed Systems},
+  year = {2008},
+  volume = {19},
+  number = {11},
+  pages = {1445--1457},
+  url = {http://engineering.purdue.edu/paramnt/publications/KSME08.pdf}
+}
+</pre></td>
+</tr>
+<tr id="LeEi08b" class="entry">
+	<td>Lee, S. &amp; Eigenmann, R.</td>
+	<td>Adaptive Tuning in a Dynamically Changing Resource Environment <p class="infolinks">[<a href="javascript:toggleInfo('LeEi08b','bibtex')">BibTeX</a>]</p></td>
+	<td>2008</td>
+	<td>Workshop on Next-Generation Software Systems, Int'l Parallel and Distributed Processing Symposium (IPDPS'08), pp. 1-5&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/NSFNGS08_LE.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_LeEi08b" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{LeEi08b,
+  author = {Seyong Lee and Rudolf Eigenmann},
+  title = {Adaptive Tuning in a Dynamically Changing Resource Environment},
+  booktitle = {Workshop on Next-Generation Software Systems, Int'l Parallel and Distributed Processing Symposium (IPDPS'08)},
+  year = {2008},
+  pages = {1--5},
+  url = {http://engineering.purdue.edu/paramnt/publications/NSFNGS08_LE.pdf}
+}
+</pre></td>
+</tr>
+<tr id="ishare_pcgrid08" class="entry">
+	<td>Lee, S., Ren, X. &amp; Eigenmann, R.</td>
+	<td>Efficient Content Search in iShare, a P2P-based Internet-Sharing System <p class="infolinks">[<a href="javascript:toggleInfo('ishare_pcgrid08','bibtex')">BibTeX</a>]</p></td>
+	<td>2008</td>
+	<td>Workshop on Large-scale, Volatile Desktop Grids, Int'l Parallel and Distributed Processing Symposium (IPDPS'08), pp. 1-8&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/PCGrid08_LRE.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_ishare_pcgrid08" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{ishare_pcgrid08,
+  author = {Seyong Lee and Xiaojuan Ren and Rudolf Eigenmann},
+  title = {Efficient Content Search in iShare, a P2P-based Internet-Sharing System},
+  booktitle = {Workshop on Large-scale, Volatile Desktop Grids, Int'l Parallel and Distributed Processing Symposium (IPDPS'08)},
+  year = {2008},
+  pages = {1--8},
+  url = {http://engineering.purdue.edu/paramnt/publications/PCGrid08_LRE.pdf}
+}
+</pre></td>
+</tr>
+<tr id="BME07" class="entry">
+	<td>Ayon Basumallik, Seung-Jai Min, R.E.</td>
+	<td>Programming Distributed Memory Systems Using OpenMP <p class="infolinks">[<a href="javascript:toggleInfo('BME07','bibtex')">BibTeX</a>]</p></td>
+	<td>2007</td>
+	<td>Workshop on High-level Interfaces for Parallel Systems, Int'l Parallel and Distributed Processing Symposium, pp. (8 pages)&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/HIPS07-smin.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_BME07" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{BME07,
+  author = {Rudolf Eigenmann Ayon Basumallik, Seung-Jai Min},
+  title = {Programming Distributed Memory Systems Using OpenMP},
+  booktitle = {Workshop on High-level Interfaces for Parallel Systems, Int'l Parallel and Distributed Processing Symposium},
+  year = {2007},
+  pages = {(8 pages)},
+  url = {http://engineering.purdue.edu/paramnt/publications/HIPS07-smin.pdf}
+}
+</pre></td>
+</tr>
+<tr id="Bas07" class="entry">
+	<td>Basumallik, A.</td>
+	<td>Compiling Shared-Memory Applications for Distributed-Memory Systems <p class="infolinks">[<a href="javascript:toggleInfo('Bas07','bibtex')">BibTeX</a>]</p></td>
+	<td>2007</td>
+	<td><i>School</i>: Purdue University, School of Electrical and Computer Engineering&nbsp;</td>
+	<td>phdthesis</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/Thesis-Basumallik.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_Bas07" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@phdthesis{Bas07,
+  author = {Ayon Basumallik},
+  title = {Compiling Shared-Memory Applications for Distributed-Memory Systems},
+  school = {Purdue University, School of Electrical and Computer Engineering},
+  year = {2007},
+  url = {http://engineering.purdue.edu/paramnt/publications/Thesis-Basumallik.pdf}
+}
+</pre></td>
+</tr>
+<tr id="HPDC_fgcs07" class="entry">
+	<td>Ren, X., Eigenmann, R. &amp; Bagchi, S.</td>
+	<td>Failure-Aware Checkpointing in Fine-Grained Cycle Sharing Systems <p class="infolinks">[<a href="javascript:toggleInfo('HPDC_fgcs07','bibtex')">BibTeX</a>]</p></td>
+	<td>2007</td>
+	<td>Proceedings of the IEEE International Symposium on High Performance Distributed Computing, pp. 33-42&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/HPDC_fgcs07.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_HPDC_fgcs07" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{HPDC_fgcs07,
+  author = {Xiaojuan Ren and Rudolf Eigenmann and Saurabh Bagchi},
+  title = {Failure-Aware Checkpointing in Fine-Grained Cycle Sharing Systems},
+  booktitle = {Proceedings of the IEEE International Symposium on High Performance Distributed Computing},
+  year = {2007},
+  pages = {33--42},
+  url = {http://engineering.purdue.edu/paramnt/publications/HPDC_fgcs07.pdf}
+}
+</pre></td>
+</tr>
+<tr id="JoGC07" class="entry">
+	<td>Ren, X., Lee, S., Eigenmann, R. &amp; Bagchi, S.</td>
+	<td>Prediction of Resource Availability in Fine-Grained Cycle Sharing Systems and Empirical Evaluation <p class="infolinks">[<a href="javascript:toggleInfo('JoGC07','bibtex')">BibTeX</a>]</p></td>
+	<td>2007</td>
+	<td>Journal of Grid Computing<br/>Vol. 5(2), pp. 173-195&nbsp;</td>
+	<td>article</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/JOGC07_RLEB.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_JoGC07" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@article{JoGC07,
+  author = {Xiaojuan Ren and Seyong Lee and Rudolf Eigenmann and Saurabh Bagchi},
+  title = {Prediction of Resource Availability in Fine-Grained Cycle Sharing Systems and Empirical Evaluation},
+  journal = {Journal of Grid Computing},
+  year = {2007},
+  volume = {5},
+  number = {2},
+  pages = {173--195},
+  url = {http://engineering.purdue.edu/paramnt/publications/JOGC07_RLEB.pdf}
+}
+</pre></td>
+</tr>
+<tr id="johnson07empirical" class="entry">
+	<td>Johnson, T.A., Vijaykumar, T.N. &amp; Eigenmann, R.</td>
+	<td>Speculative Thread Decomposition Through Empirical Optimization <p class="infolinks">[<a href="javascript:toggleInfo('johnson07empirical','bibtex')">BibTeX</a>]</p></td>
+	<td>2007</td>
+	<td>Proceedings of the ACM Symposium on the Principles and Practice of Parallel Programming&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/johnson07empirical.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_johnson07empirical" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{johnson07empirical,
+  author = {Troy A. Johnson and T. N. Vijaykumar and Rudolf Eigenmann},
+  title = {Speculative Thread Decomposition Through Empirical Optimization},
+  booktitle = {Proceedings of the ACM Symposium on the Principles and Practice of Parallel Programming},
+  year = {2007},
+  url = {http://engineering.purdue.edu/paramnt/publications/johnson07empirical.pdf}
+}
+</pre></td>
+</tr>
+<tr id="ishare_pcgrid07" class="entry">
+	<td>Ren, X., Basumallik, A., Pan, Z. &amp; Eigenmann, R.</td>
+	<td>Open Internet-based Sharing for Desktop Grids in iShare <p class="infolinks">[<a href="javascript:toggleInfo('ishare_pcgrid07','bibtex')">BibTeX</a>]</p></td>
+	<td>2007</td>
+	<td>Proc. of the 1st Workshop on Large-scale, Volatile Desktop Grids, pp. 8 pages&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/ishare_pcgrid07.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_ishare_pcgrid07" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{ishare_pcgrid07,
+  author = {X. Ren and A. Basumallik and Z. Pan and R. Eigenmann},
+  title = {Open Internet-based Sharing for Desktop Grids in iShare},
+  booktitle = {Proc. of the 1st Workshop on Large-scale, Volatile Desktop Grids},
+  year = {2007},
+  pages = {8 pages},
+  url = {http://engineering.purdue.edu/paramnt/publications/ishare_pcgrid07.pdf}
+}
+</pre></td>
+</tr>
+<tr id="BaEi06" class="entry">
+	<td>Basumallik, A. &amp; Eigenmann, R.</td>
+	<td>Optimizing Irregular Shared-Memory Applications for Distributed-Memory Systems <p class="infolinks">[<a href="javascript:toggleInfo('BaEi06','bibtex')">BibTeX</a>]</p></td>
+	<td>2006</td>
+	<td>Proc. of the ACM Symposium on Principles and Practice of Parallel Programming (PPOPP'06)&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/ppopp06.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_BaEi06" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{BaEi06,
+  author = {Ayon Basumallik and Rudolf Eigenmann},
+  title = {Optimizing Irregular Shared-Memory Applications for Distributed-Memory Systems},
+  booktitle = {Proc. of the ACM Symposium on Principles and Practice of Parallel Programming (PPOPP'06)},
+  publisher = {ACM Press},
+  year = {2006},
+  url = {http://engineering.purdue.edu/paramnt/publications/ppopp06.pdf}
+}
+</pre></td>
+</tr>
+<tr id="JoEi06" class="entry">
+	<td>Johnson, T.A. &amp; Eigenmann, R.</td>
+	<td>Context-sensitive domain-independent algorithm composition and selection <p class="infolinks">[<a href="javascript:toggleInfo('JoEi06','bibtex')">BibTeX</a>]</p></td>
+	<td>2006</td>
+	<td>Proc. of ACM SIGPLAN Conference on Programming Language Design and Implementation (PLDI)<br/>Vol. 41(6), pp. 181-192&nbsp;</td>
+	<td>article</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/JoEi06.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_JoEi06" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@article{JoEi06,
+  author = {Troy A. Johnson and Rudolf Eigenmann},
+  title = {Context-sensitive domain-independent algorithm composition and selection},
+  journal = {Proc. of ACM SIGPLAN Conference on Programming Language Design and Implementation (PLDI)},
+  publisher = {ACM Press},
+  year = {2006},
+  volume = {41},
+  number = {6},
+  pages = {181--192},
+  url = {http://engineering.purdue.edu/paramnt/publications/JoEi06.pdf}
+}
+</pre></td>
+</tr>
+<tr id="KOEFV02" class="entry">
+	<td>Kim, S.W., Ooi, C.-L., Eigenmann, R., Falsafi, B. &amp; Vijaykumar, T.N.</td>
+	<td>Exploiting reference idempotency to reduce speculative storage overflow <p class="infolinks">[<a href="javascript:toggleInfo('KOEFV02','bibtex')">BibTeX</a>]</p></td>
+	<td>2006</td>
+	<td>ACM Trans. Program. Lang. Syst.<br/>Vol. 28(5), pp. 942-965&nbsp;</td>
+	<td>article</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/KOEFV02.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_KOEFV02" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@article{KOEFV02,
+  author = {Seon Wook Kim and Chong-Liang Ooi and Rudolf Eigenmann and Babak Falsafi and T. N. Vijaykumar},
+  title = {Exploiting reference idempotency to reduce speculative storage overflow},
+  journal = {ACM Trans. Program. Lang. Syst.},
+  publisher = {ACM Press},
+  year = {2006},
+  volume = {28},
+  number = {5},
+  pages = {942--965},
+  url = {http://engineering.purdue.edu/paramnt/publications/KOEFV02.pdf}
+}
+</pre></td>
+</tr>
+<tr id="PaEi06" class="entry">
+	<td>Pan, Z. &amp; Eigenmann, R.</td>
+	<td>Fast, Automatic, Procedure-Level Performance Tuning <p class="infolinks">[<a href="javascript:toggleInfo('PaEi06','bibtex')">BibTeX</a>]</p></td>
+	<td>2006</td>
+	<td>Proc. of Parallel architectures and Compilation Techniques, pp. 173-181&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/p173-pan.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_PaEi06" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{PaEi06,
+  author = {Zhelong Pan and Rudolf Eigenmann},
+  title = {Fast, Automatic, Procedure-Level Performance Tuning},
+  booktitle = {Proc. of Parallel architectures and Compilation Techniques},
+  year = {2006},
+  pages = {173--181},
+  url = {http://engineering.purdue.edu/paramnt/publications/p173-pan.pdf}
+}
+</pre></td>
+</tr>
+<tr id="ReEi06" class="entry">
+	<td>Ren, X. &amp; Eigenmann, R.</td>
+	<td>Empirical Studies on the Behavior of Resource Availability in Fine-Grained Cycle Sharing Systems <p class="infolinks">[<a href="javascript:toggleInfo('ReEi06','bibtex')">BibTeX</a>]</p></td>
+	<td>2006</td>
+	<td>International Conference on Parallel Processing, pp. 3-11&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/ReEi06.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_ReEi06" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{ReEi06,
+  author = {Xiaojuan Ren and Rudolf Eigenmann},
+  title = {Empirical Studies on the Behavior of Resource Availability in Fine-Grained Cycle Sharing Systems},
+  booktitle = {International Conference on Parallel Processing},
+  year = {2006},
+  pages = {3--11},
+  url = {http://engineering.purdue.edu/paramnt/publications/ReEi06.pdf}
+}
+</pre></td>
+</tr>
+<tr id="johnson06transactions" class="entry">
+	<td>Johnson, T.A., Lee, S.-I., Min, S.-J. &amp; Eigenmann, R.</td>
+	<td>Can Transactions Enhance Parallel Programs? <p class="infolinks">[<a href="javascript:toggleInfo('johnson06transactions','bibtex')">BibTeX</a>]</p></td>
+	<td>2006</td>
+	<td>Proceedings of the Workshop on Languages and Compilers for Parallel Computing&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/johnson06transactions.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_johnson06transactions" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{johnson06transactions,
+  author = {Troy A. Johnson and Sang-Ik Lee and Seung-Jai Min and Rudolf Eigenmann},
+  title = {Can Transactions Enhance Parallel Programs?},
+  booktitle = {Proceedings of the Workshop on Languages and Compilers for Parallel Computing},
+  year = {2006},
+  url = {http://engineering.purdue.edu/paramnt/publications/johnson06transactions.pdf}
+}
+</pre></td>
+</tr>
+<tr id="BREG06" class="entry">
+	<td>Basumallik, A., Ren, X., Eigenman, R. &amp; Goasguen, S.</td>
+	<td>iShare -- Bringing the TeraGrid to the User's Desktop <p class="infolinks">[<a href="javascript:toggleInfo('BREG06','bibtex')">BibTeX</a>]</p></td>
+	<td>2006</td>
+	<td>TeraGrid'06 Conference&nbsp;</td>
+	<td>inproceedings</td>
+	<td>&nbsp;</td>
+</tr>
+<tr id="bib_BREG06" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{BREG06,
+  author = {Ayon Basumallik and Xiaojuan Ren and Rudolf Eigenman and Sebastien Goasguen},
+  title = {iShare -- Bringing the TeraGrid to the User's Desktop},
+  booktitle = {TeraGrid'06 Conference},
+  year = {2006}
+}
+</pre></td>
+</tr>
+<tr id="fgcs-hpdc06" class="entry">
+	<td>Ren, X., Lee, S., Eigenmann, R. &amp; Bagchi, S.</td>
+	<td>Resource Availability Prediction in Fine-Grained Cycle Sharing Systems <p class="infolinks">[<a href="javascript:toggleInfo('fgcs-hpdc06','bibtex')">BibTeX</a>]</p></td>
+	<td>2006</td>
+	<td>Proceedings of the 15th IEEE International Symposium on High Performance Distributed Computing, pp. 93-104&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/HPDC06_RLEB.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_fgcs-hpdc06" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{fgcs-hpdc06,
+  author = {Xiaojuan Ren and Seyong Lee and Rudolf Eigenmann and Saurabh Bagchi},
+  title = {Resource Availability Prediction in Fine-Grained Cycle Sharing Systems},
+  booktitle = {Proceedings of the 15th IEEE International Symposium on High Performance Distributed Computing},
+  year = {2006},
+  pages = {93--104},
+  url = {http://engineering.purdue.edu/paramnt/publications/HPDC06_RLEB.pdf}
+}
+</pre></td>
+</tr>
+<tr id="PREX06_MPIIShare" class="entry">
+	<td>Pan, Z., Ren, X., Eigenmann, R. &amp; Xu, D.</td>
+	<td>Executing MPI Programs on Virtual Machines in an Internet Sharing System <p class="infolinks">[<a href="javascript:toggleInfo('PREX06_MPIIShare','bibtex')">BibTeX</a>]</p></td>
+	<td>2006</td>
+	<td>IEEE International Parallel &amp; Distributed Processing Symposium (IPDPS 2006), pp. 10 pages&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/ipdps06.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_PREX06_MPIIShare" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{PREX06_MPIIShare,
+  author = {Zhelong Pan and Xiaojuan Ren and Rudolf Eigenmann and Dongyan Xu},
+  title = {Executing MPI Programs on Virtual Machines in an Internet Sharing System},
+  booktitle = {IEEE International Parallel &amp; Distributed Processing Symposium (IPDPS 2006)},
+  year = {2006},
+  pages = {10 pages},
+  url = {http://engineering.purdue.edu/paramnt/publications/ipdps06.pdf}
+}
+</pre></td>
+</tr>
+<tr id="PE06_Orchestration" class="entry">
+	<td>Pan, Z. &amp; Eigenmann, R.</td>
+	<td>Fast and Effective Orchestration of Compiler Optimizations for Automatic Performance Tuning <p class="infolinks">[<a href="javascript:toggleInfo('PE06_Orchestration','bibtex')">BibTeX</a>]</p></td>
+	<td>2006</td>
+	<td>The 4th Annual International Symposium on Code Generation and Optimization (CGO), pp. 319-330&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/PE06_Orchestration.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_PE06_Orchestration" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{PE06_Orchestration,
+  author = {Zhelong Pan and Rudolf Eigenmann},
+  title = {Fast and Effective Orchestration of Compiler Optimizations for Automatic Performance Tuning},
+  booktitle = {The 4th Annual International Symposium on Code Generation and Optimization (CGO)},
+  year = {2006},
+  pages = {319--330},
+  url = {http://engineering.purdue.edu/paramnt/publications/PE06_Orchestration.pdf}
+}
+</pre></td>
+</tr>
+<tr id="ABE+06" class="entry">
+	<td>Armstrong, B., Bae, H., Eigenmann, R., Saied, F., Sayeed, M. &amp; Zheng, Y.</td>
+	<td>HPC Benchmarking and Performance Evaluation With Realistic Applications <p class="infolinks">[<a href="javascript:toggleInfo('ABE+06','bibtex')">BibTeX</a>]</p></td>
+	<td>2006</td>
+	<td>Proc. SPEC Benchmarking Workshop 2006, pp. 11 pages&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/SPEC06.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_ABE+06" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{ABE+06,
+  author = {Brian Armstrong and Hansang Bae and Rudolf Eigenmann and Faisal Saied and Mohamed Sayeed and Yili Zheng},
+  title = {HPC Benchmarking and Performance Evaluation With Realistic Applications},
+  booktitle = {Proc. SPEC Benchmarking Workshop 2006},
+  year = {2006},
+  pages = {11 pages},
+  url = {http://engineering.purdue.edu/paramnt/publications/SPEC06.pdf}
+}
+</pre></td>
+</tr>
+<tr id="WKG+06" class="entry">
+	<td>van Waveren, M., Kalyanasundaram, K., Gaertner, G., Jones, W., Eigenmann, R., Lieberman, R., M&uuml;ller, M.S., Whitney, B. &amp; Saito, H.</td>
+	<td>SPEC HPG Benchmarks for HPC Systems <p class="infolinks">[<a href="javascript:toggleInfo('WKG+06','bibtex')">BibTeX</a>]</p></td>
+	<td>2006</td>
+	<td>Proc. Benchmarking Workshop 2006&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/spec06b.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_WKG+06" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{WKG+06,
+  author = {Matthijs van Waveren and Kumaran Kalyanasundaram and Greg Gaertner and Wesley Jones and Rudolf Eigenmann and Ron Lieberman and Matthias S. M&uuml;ller and Brian Whitney and Hideki Saito},
+  title = {SPEC HPG Benchmarks for HPC Systems},
+  booktitle = {Proc. Benchmarking Workshop 2006},
+  year = {2006},
+  url = {http://engineering.purdue.edu/paramnt/publications/spec06b.pdf}
+}
+</pre></td>
+</tr>
+<tr id="BasEi05" class="entry">
+	<td>Basumallik, A. &amp; Eigenmann, R.</td>
+	<td>Towards Automatic Translation of OpenMP to MPI <p class="infolinks">[<a href="javascript:toggleInfo('BasEi05','bibtex')">BibTeX</a>]</p></td>
+	<td>2005</td>
+	<td>Proc. of the International Conference on Supercomputing, ICS'05, pp. 189-198&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/BasEi05.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_BasEi05" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{BasEi05,
+  author = {Ayon Basumallik and Rudolf Eigenmann},
+  title = {Towards Automatic Translation of OpenMP to MPI},
+  booktitle = {Proc. of the International Conference on Supercomputing, ICS'05},
+  year = {2005},
+  pages = {189--198},
+  url = {http://engineering.purdue.edu/paramnt/publications/BasEi05.pdf}
+}
+</pre></td>
+</tr>
+<tr id="BaEi05" class="entry">
+	<td>Bae, H. &amp; Eigenmann, R.</td>
+	<td>Interprocedural Symbolic Range Propagation for Optimizing Compilers <p class="infolinks">[<a href="javascript:toggleInfo('BaEi05','bibtex')">BibTeX</a>]</p></td>
+	<td>2005</td>
+	<td>Proc. of the Workshop on Languages and Compilers for Parallel Computing(LCPC'05), pp. 413-424&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/LCPC05.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_BaEi05" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{BaEi05,
+  author = {Hansang Bae and Rudolf Eigenmann},
+  title = {Interprocedural Symbolic Range Propagation for Optimizing Compilers},
+  booktitle = {Proc. of the Workshop on Languages and Compilers for Parallel Computing(LCPC'05)},
+  year = {2005},
+  pages = {413--424},
+  url = {http://engineering.purdue.edu/paramnt/publications/LCPC05.pdf}
+}
+</pre></td>
+</tr>
+<tr id="PaEi05" class="entry">
+	<td>Pan, Z., Armstrong, B., Bae, H. &amp; Eigenmann, R.</td>
+	<td>On the Interaction of Tiling and Automatic Parallelization <p class="infolinks">[<a href="javascript:toggleInfo('PaEi05','bibtex')">BibTeX</a>]</p></td>
+	<td>2005</td>
+	<td>First International Workshop on OpenMP, pp. 24-35&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/IWOMP05.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_PaEi05" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{PaEi05,
+  author = {Zhelong Pan and Brian Armstrong and Hansang Bae and Rudolf Eigenmann},
+  title = {On the Interaction of Tiling and Automatic Parallelization},
+  booktitle = {First International Workshop on OpenMP},
+  year = {2005},
+  pages = {24--35},
+  url = {http://engineering.purdue.edu/paramnt/publications/IWOMP05.pdf}
+}
+</pre></td>
+</tr>
+<tr id="KSME05" class="entry">
+	<td>Kim, J.-K., Siegel, H.J., Maciejewski, A.A. &amp; Eigenmann, R.</td>
+	<td>Dynamic mapping in Energy Constrained Heterogeneous Computing Systems <p class="infolinks">[<a href="javascript:toggleInfo('KSME05','bibtex')">BibTeX</a>]</p></td>
+	<td>2005</td>
+	<td>Proc. of International Parallel and Distributed Processing Symposium (IPDPS 2005)&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://portal.acm.org/citation.cfm?id=1054405">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_KSME05" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{KSME05,
+  author = {Jong-Kook Kim and Howard Jay Siegel and Anthony A. Maciejewski and Rudolf Eigenmann},
+  title = {Dynamic mapping in Energy Constrained Heterogeneous Computing Systems},
+  booktitle = {Proc. of International Parallel and Distributed Processing Symposium (IPDPS 2005)},
+  year = {2005},
+  url = {http://portal.acm.org/citation.cfm?id=1054405}
+}
+</pre></td>
+</tr>
+<tr id="iShare_EGC05" class="entry">
+	<td>Ren, X. &amp; Eigenmann, R.</td>
+	<td>iShare - Open Internet Sharing Built on Peer-to-Peer and Web <p class="infolinks">[<a href="javascript:toggleInfo('iShare_EGC05','bibtex')">BibTeX</a>]</p></td>
+	<td>2005</td>
+	<td>European Grid Conference, pp. 1117-1127&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/egc05.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_iShare_EGC05" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{iShare_EGC05,
+  author = {Xiaojuan Ren and Rudolf Eigenmann},
+  title = {iShare - Open Internet Sharing Built on Peer-to-Peer and Web},
+  booktitle = {European Grid Conference},
+  year = {2005},
+  pages = {1117--1127},
+  url = {http://engineering.purdue.edu/paramnt/publications/egc05.pdf}
+}
+</pre></td>
+</tr>
+<tr id="HFE04" class="entry">
+	<td>Hassanein, W., Fortes, J. &amp; Eigenmann, R.</td>
+	<td>Data Forwarding Through In-Memory Precomputation Threads <p class="infolinks">[<a href="javascript:toggleInfo('HFE04','bibtex')">BibTeX</a>]</p></td>
+	<td>2004</td>
+	<td>Proceedings of the ACM International Conference on Supercomputing&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/ics04.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_HFE04" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{HFE04,
+  author = {Wessam Hassanein and Jose Fortes and Rudolf Eigenmann},
+  title = {Data Forwarding Through In-Memory Precomputation Threads},
+  booktitle = {Proceedings of the ACM International Conference on Supercomputing},
+  year = {2004},
+  url = {http://engineering.purdue.edu/paramnt/publications/ics04.pdf}
+}
+</pre></td>
+</tr>
+<tr id="JXE04" class="entry">
+	<td>Jiang, X., Xu, D. &amp; Eigenmann, R.</td>
+	<td>Protection Mechanisms for Application Service Hosting Platforms <p class="infolinks">[<a href="javascript:toggleInfo('JXE04','bibtex')">BibTeX</a>]</p></td>
+	<td>2004</td>
+	<td>Proceedings of the IEEE/ACM International Symposium on Cluster Computing and the Grid (CCGrid)&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/CCGrid04.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_JXE04" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{JXE04,
+  author = {Xuxian Jiang and Dongyan Xu and Rudolf Eigenmann},
+  title = {Protection Mechanisms for Application Service Hosting Platforms},
+  booktitle = {Proceedings of the IEEE/ACM International Symposium on Cluster Computing and the Grid (CCGrid)},
+  year = {2004},
+  url = {http://engineering.purdue.edu/paramnt/publications/CCGrid04.pdf}
+}
+</pre></td>
+</tr>
+<tr id="XDE04" class="entry">
+	<td>Jiang, X., Xu, D. &amp; Eigenmann, R.</td>
+	<td>Protection Mechanisms for Application Service Hosting Platforms <p class="infolinks">[<a href="javascript:toggleInfo('XDE04','bibtex')">BibTeX</a>]</p></td>
+	<td>2004</td>
+	<td>Proceedings of IEEE International Symposium on Cluster Computing and the Grid (CCGrid), pp. 656-663&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/CCGrid04.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_XDE04" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{XDE04,
+  author = {Xuxian Jiang and Dongyan Xu and Rudolf Eigenmann},
+  title = {Protection Mechanisms for Application Service Hosting Platforms},
+  booktitle = {Proceedings of IEEE International Symposium on Cluster Computing and the Grid (CCGrid)},
+  year = {2004},
+  pages = {656--663},
+  url = {http://engineering.purdue.edu/paramnt/publications/CCGrid04.pdf}
+}
+</pre></td>
+</tr>
+<tr id="JEV04" class="entry">
+	<td>Johnson, T.A., Eigenmann, R. &amp; Vijaykumar, T.N.</td>
+	<td>Min-Cut Program Decomposition for Thread-Level Speculation <p class="infolinks">[<a href="javascript:toggleInfo('JEV04','bibtex')">BibTeX</a>]</p></td>
+	<td>2004</td>
+	<td>Proc. of ACM SIGPLAN Conference on Programming Language Design and Implementation (PLDI), pp. 59-70&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/JEV04.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_JEV04" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{JEV04,
+  author = {Troy A. Johnson and Rudolf Eigenmann and T. N. Vijaykumar},
+  title = {Min-Cut Program Decomposition for Thread-Level Speculation},
+  booktitle = {Proc. of ACM SIGPLAN Conference on Programming Language Design and Implementation (PLDI)},
+  year = {2004},
+  pages = {59--70},
+  url = {http://engineering.purdue.edu/paramnt/publications/JEV04.pdf}
+}
+</pre></td>
+</tr>
+<tr id="MiEi04" class="entry">
+	<td>Min, S.-J. &amp; Eigenmann, R.</td>
+	<td>Combined Compile-time and Runtime-driven, Pro-active Data Movement in Software DSM Systems <p class="infolinks">[<a href="javascript:toggleInfo('MiEi04','bibtex')">BibTeX</a>]</p></td>
+	<td>2004</td>
+	<td>Proc. of Seventh Workshop on Languages, Compilers, and Run-Time Systems for Scalable Computers (LCR2004), pp. 1-6&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/lcr04.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_MiEi04" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{MiEi04,
+  author = {Seung-Jai Min and Rudolf Eigenmann},
+  title = {Combined Compile-time and Runtime-driven, Pro-active Data Movement in Software DSM Systems},
+  booktitle = {Proc. of Seventh Workshop on Languages, Compilers, and Run-Time Systems for Scalable Computers (LCR2004)},
+  year = {2004},
+  pages = {1--6},
+  url = {http://engineering.purdue.edu/paramnt/publications/lcr04.pdf}
+}
+</pre></td>
+</tr>
+<tr id="PaEi04" class="entry">
+	<td>Pan, Z. &amp; Eigenmann, R.</td>
+	<td>Rating Compiler Optimizations for Automatic Performance Tuning <p class="infolinks">[<a href="javascript:toggleInfo('PaEi04','bibtex')">BibTeX</a>]</p></td>
+	<td>2004</td>
+	<td>SC2004: High Performance Computing, Networking and Storage Conference, pp. (10 pages)&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/sc04.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_PaEi04" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{PaEi04,
+  author = {Zhelong Pan and Rudolf Eigenmann},
+  title = {Rating Compiler Optimizations for Automatic Performance Tuning},
+  booktitle = {SC2004: High Performance Computing, Networking and Storage Conference},
+  year = {2004},
+  pages = {(10 pages)},
+  url = {http://engineering.purdue.edu/paramnt/publications/sc04.pdf}
+}
+</pre></td>
+</tr>
+<tr id="JLF04" class="entry">
+	<td>Johnson, T.A., Lee, S.-I., Fei, L., Basumallik, A., Upadhyaya, G., Eigenmann, R. &amp; Midkiff, S.P.</td>
+	<td>Experiences in Using Cetus for Source-to-Source Transformations <p class="infolinks">[<a href="javascript:toggleInfo('JLF04','bibtex')">BibTeX</a>]</p></td>
+	<td>2004</td>
+	<td>Proc. of the Workshop on Languages and Compilers for Parallel Computing (LCPC'04), pp. 1-14&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/lcpc04.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_JLF04" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{JLF04,
+  author = {Troy A. Johnson and Sang-Ik Lee and Long Fei and Ayon Basumallik and Gautam Upadhyaya and Rudolf Eigenmann and Samuel P. Midkiff},
+  title = {Experiences in Using Cetus for Source-to-Source Transformations},
+  booktitle = {Proc. of the Workshop on Languages and Compilers for Parallel Computing (LCPC'04)},
+  publisher = {Springer Verlag, Lecture Notes in Computer Science},
+  year = {2004},
+  pages = {1--14},
+  url = {http://engineering.purdue.edu/paramnt/publications/lcpc04.pdf}
+}
+</pre></td>
+</tr>
+<tr id="PDCS04" class="entry">
+	<td>Ren, X., Pan, Z., Eigenmann, R. &amp; Hu, Y.C.</td>
+	<td>Decentralized and Hierarchical Discovery of Software Applications in the iShare Internet Sharing System <p class="infolinks">[<a href="javascript:toggleInfo('PDCS04','bibtex')">BibTeX</a>]</p></td>
+	<td>2004</td>
+	<td>Proceedings of International Conference on Parallel and Distributed Computing Systems, pp. 124-130&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/PDCS04.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_PDCS04" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{PDCS04,
+  author = {Xiaojuan Ren and Zhelong Pan and Rudolf Eigenmann and Y. Charlie Hu},
+  title = {Decentralized and Hierarchical Discovery of Software Applications in the iShare Internet Sharing System},
+  booktitle = {Proceedings of International Conference on Parallel and Distributed Computing Systems},
+  year = {2004},
+  pages = {124--130},
+  url = {http://engineering.purdue.edu/paramnt/publications/PDCS04.pdf}
+}
+</pre></td>
+</tr>
+<tr id="AsEi03" class="entry">
+	<td>Aslot, V. &amp; Eigenmann, R.</td>
+	<td>Quantitative performance analysis of the SPEC OMPM2001 benchmarks <p class="infolinks">[<a href="javascript:toggleInfo('AsEi03','bibtex')">BibTeX</a>]</p></td>
+	<td>2003</td>
+	<td>Scientific Programming<br/>Vol. 11(2), pp. 105-124&nbsp;</td>
+	<td>article</td>
+	<td><a href="http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.65.4966">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_AsEi03" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@article{AsEi03,
+  author = {Vishal Aslot and Rudolf Eigenmann},
+  title = {Quantitative performance analysis of the SPEC OMPM2001 benchmarks},
+  journal = {Scientific Programming},
+  year = {2003},
+  volume = {11},
+  number = {2},
+  pages = {105--124},
+  url = {http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.65.4966}
+}
+</pre></td>
+</tr>
+<tr id="ISPASS-2003" class="entry">
+	<td>Hassanein, W., Astfalk, G. &amp; Eigenmann, R.</td>
+	<td>Performance Analysis and Tracing of Technical and Java Applications On the Itanium 2 Processor <p class="infolinks">[<a href="javascript:toggleInfo('ISPASS-2003','bibtex')">BibTeX</a>]</p></td>
+	<td>2003</td>
+	<td>Proceedings of the IEEE International Symposium on Performance Analysis of Systems and Software, pp. 91-100&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.119.6335">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_ISPASS-2003" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{ISPASS-2003,
+  author = {Wessam Hassanein and Greg Astfalk and Rudolf Eigenmann},
+  title = {Performance Analysis and Tracing of Technical and Java Applications On the Itanium 2 Processor},
+  booktitle = {Proceedings of the IEEE International Symposium on Performance Analysis of Systems and Software},
+  year = {2003},
+  pages = {91--100},
+  url = {http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.119.6335}
+}
+</pre></td>
+</tr>
+<tr id="sminwompat03" class="entry">
+	<td>Min, S.-J., Basumallik, A. &amp; Eigenmann, R.</td>
+	<td>Supporting Realistic OpenMP Applications on a Commodity Cluster of Workstations <p class="infolinks">[<a href="javascript:toggleInfo('sminwompat03','bibtex')">BibTeX</a>]</p></td>
+	<td>2003</td>
+	<td>OpenMP Shared Memory Parallel Programming: International Workshop on OpenMP Applications and Tools, WOMPAT 2003, Toronto, Canada, June 26-27, 2003. Proceedings Editors: M. J. Voss (Ed.), pp. 170-179&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/wompat03.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_sminwompat03" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{sminwompat03,
+  author = {Seung-Jai Min and Ayon Basumallik and Rudolf Eigenmann},
+  title = {Supporting Realistic OpenMP Applications on a Commodity Cluster of Workstations},
+  booktitle = {OpenMP Shared Memory Parallel Programming: International Workshop on OpenMP Applications and Tools, WOMPAT 2003, Toronto, Canada, June 26-27, 2003. Proceedings Editors: M. J. Voss (Ed.)},
+  year = {2003},
+  pages = {170--179},
+  url = {http://engineering.purdue.edu/paramnt/publications/wompat03.pdf}
+}
+</pre></td>
+</tr>
+<tr id="LJE03" class="entry">
+	<td>Lee, S.-I., Johnson, T.A. &amp; Eigenmann, R.</td>
+	<td>Cetus -- An Extensible Compiler Infrastructure for Source-to-Source Transformation <p class="infolinks">[<a href="javascript:toggleInfo('LJE03','bibtex')">BibTeX</a>]</p></td>
+	<td>2003</td>
+	<td>Proc. of the Workshop on Languages and Compilers for Parallel Computing(LCPC'03), pp. 539-553&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/lcpc03.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_LJE03" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{LJE03,
+  author = {Sang-Ik Lee and Troy A. Johnson and Rudolf Eigenmann},
+  title = {Cetus -- An Extensible Compiler Infrastructure for Source-to-Source Transformation},
+  booktitle = {Proc. of the Workshop on Languages and Compilers for Parallel Computing(LCPC'03)},
+  publisher = {Springer Verlag, Lecture Notes in Computer Science 2958},
+  year = {2003},
+  pages = {539--553},
+  url = {http://engineering.purdue.edu/paramnt/publications/lcpc03.pdf}
+}
+</pre></td>
+</tr>
+<tr id="MBE03" class="entry">
+	<td>Min, S.-J., Basumallik, A. &amp; Eigenmann, R.</td>
+	<td>Optimizing OpenMP Programs on Software Distributed Shared Memory Systems <p class="infolinks">[<a href="javascript:toggleInfo('MBE03','bibtex')">BibTeX</a>]</p></td>
+	<td>2003</td>
+	<td>International Journal of Parallel Programming<br/>Vol. 31(3), pp. 225-249&nbsp;</td>
+	<td>article</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/ijpp-sdsm03.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_MBE03" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@article{MBE03,
+  author = {Seung-Jai Min and Ayon Basumallik and Rudolf Eigenmann},
+  title = {Optimizing OpenMP Programs on Software Distributed Shared Memory Systems},
+  journal = {International Journal of Parallel Programming},
+  year = {2003},
+  volume = {31},
+  number = {3},
+  pages = {225--249},
+  url = {http://engineering.purdue.edu/paramnt/publications/ijpp-sdsm03.pdf}
+}
+</pre></td>
+</tr>
+<tr id="EGJ02" class="entry">
+	<td>Eigenmann, R., Gaertner, G. &amp; Jones, W.</td>
+	<td>SPEC HPC2002: The Next High-Performance Computer Benchmark <p class="infolinks">[<a href="javascript:toggleInfo('EGJ02','bibtex')">BibTeX</a>]</p></td>
+	<td>2002</td>
+	<td>Lecture Notes in Computer Science, 2327, pp. 7-10&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/hpc2002.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_EGJ02" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{EGJ02,
+  author = {Rudolf Eigenmann and Greg Gaertner and Wesley Jones},
+  title = {SPEC HPC2002: The Next High-Performance Computer Benchmark},
+  booktitle = {Lecture Notes in Computer Science, 2327},
+  publisher = {Springer Verlag},
+  year = {2002},
+  pages = {7--10},
+  url = {http://engineering.purdue.edu/paramnt/publications/hpc2002.pdf}
+}
+</pre></td>
+</tr>
+<tr id="WMPI-1" class="entry">
+	<td>Hassanein, W., Fortes, J. &amp; Eigenmann, R.</td>
+	<td>Towards Guided Data Forwarding using Intelligent Memory <p class="infolinks">[<a href="javascript:toggleInfo('WMPI-1','bibtex')">BibTeX</a>]</p></td>
+	<td>2002</td>
+	<td>Proceedings of the 2nd Annual Workshop on Memory Performance Issues held in conjunction with the 29th International Symposium on Computer Architecture, May, pp. 20-29&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.124.158">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_WMPI-1" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{WMPI-1,
+  author = {Wessam Hassanein and Jos&eacute; Fortes and Rudolf Eigenmann},
+  title = {Towards Guided Data Forwarding using Intelligent Memory},
+  booktitle = {Proceedings of the 2nd Annual Workshop on Memory Performance Issues held in conjunction with the 29th International Symposium on Computer Architecture, May},
+  year = {2002},
+  pages = {20--29},
+  url = {http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.124.158}
+}
+</pre></td>
+</tr>
+<tr id="SGJ+02" class="entry">
+	<td>Saito, H., Gaertner, G., Jones, W., Eigenmann, R., Iwashita, H., Lieberman, R. &amp; van Waveren, M.</td>
+	<td>Large System Performance of SPEC OMP2001 Benchmarks <p class="infolinks">[<a href="javascript:toggleInfo('SGJ+02','bibtex')">BibTeX</a>]</p></td>
+	<td>2002</td>
+	<td>Lecture Notes in Computer Science, 2327, pp. 370-379&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://www.springerlink.com/content/p745q440x3321267/">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_SGJ+02" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{SGJ+02,
+  author = {Hideki Saito and Greg Gaertner and Wesley Jones and Rudolf Eigenmann and Hidetoshi Iwashita and Ron Lieberman and Matthijs van Waveren},
+  title = {Large System Performance of SPEC OMP2001 Benchmarks},
+  booktitle = {Lecture Notes in Computer Science, 2327},
+  publisher = {Springer Verlag},
+  year = {2002},
+  pages = {370--379},
+  url = {http://www.springerlink.com/content/p745q440x3321267/}
+}
+</pre></td>
+</tr>
+<tr id="BaEi02" class="entry">
+	<td>Bae, H. &amp; Eigenmann, R.</td>
+	<td>Performance Analysis of Symbolic Analysis Techniques for Parallelizing Compilers <p class="infolinks">[<a href="javascript:toggleInfo('BaEi02','bibtex')">BibTeX</a>]</p></td>
+	<td>2002</td>
+	<td>Proc. of the Workshop on Languages and Compilers for Parallel Computing(LCPC'02), pp. 280-294&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/LCPC02.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_BaEi02" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{BaEi02,
+  author = {Hansang Bae and Rudolf Eigenmann},
+  title = {Performance Analysis of Symbolic Analysis Techniques for Parallelizing Compilers},
+  booktitle = {Proc. of the Workshop on Languages and Compilers for Parallel Computing(LCPC'02)},
+  year = {2002},
+  pages = {280--294},
+  url = {http://engineering.purdue.edu/paramnt/publications/LCPC02.pdf}
+}
+</pre></td>
+</tr>
+<tr id="BME02" class="entry">
+	<td>Basumallik, A., Min, S.-J. &amp; Eigenmann, R.</td>
+	<td>Towards OpenMP Execution on Software Distributed Shared Memory Systems <p class="infolinks">[<a href="javascript:toggleInfo('BME02','bibtex')">BibTeX</a>]</p></td>
+	<td>2002</td>
+	<td>Int'l Workshop on OpenMP: Experiences and Implementations (WOMPEI'02), Lecture Notes in Computer Science, 2327, pp. 457-468&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/wompei02.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_BME02" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{BME02,
+  author = {Ayon Basumallik and Seung-Jai Min and Rudolf Eigenmann},
+  title = {Towards OpenMP Execution on Software Distributed Shared Memory Systems},
+  booktitle = {Int'l Workshop on OpenMP: Experiences and Implementations (WOMPEI'02), Lecture Notes in Computer Science, 2327},
+  publisher = {Springer Verlag},
+  year = {2002},
+  pages = {457--468},
+  url = {http://engineering.purdue.edu/paramnt/publications/wompei02.pdf}
+}
+</pre></td>
+</tr>
+<tr id="EHK+02" class="entry">
+	<td>Eigenmann, R., Hoeflinger, J., Kuhn, R.H., Padua, D., Basumallik, A., Min, S.-J. &amp; Zhu, J.</td>
+	<td>Is OpenMP for Grids? <p class="infolinks">[<a href="javascript:toggleInfo('EHK+02','bibtex')">BibTeX</a>]</p></td>
+	<td>2002</td>
+	<td>Workshop on Next-Generation Systems, Int'l Parallel and Distributed Processing Symposium, pp. 8 pages (on CD ROM)&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/ipdps02.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_EHK+02" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{EHK+02,
+  author = {Rudolf Eigenmann and Jay Hoeflinger and Robert H. Kuhn and David Padua and Ayon Basumallik and Seung-Jai Min and Jiajing Zhu},
+  title = {Is OpenMP for Grids?},
+  booktitle = {Workshop on Next-Generation Systems, Int'l Parallel and Distributed Processing Symposium},
+  year = {2002},
+  pages = {8 pages (on CD ROM)},
+  url = {http://engineering.purdue.edu/paramnt/publications/ipdps02.pdf}
+}
+</pre></td>
+</tr>
+<tr id="AsEi00" class="entry">
+	<td>Armstrong, B. &amp; Eigenmann, R.</td>
+	<td>A Methodology for Scientific Benchmarking with Large-Scale Applications <p class="infolinks">[<a href="javascript:toggleInfo('AsEi00','bibtex')">BibTeX</a>]</p></td>
+	<td>2001</td>
+	<td>MIT Press, pp. 109-127&nbsp;</td>
+	<td>article</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/BenchMeth01.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_AsEi00" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@article{AsEi00,
+  author = {Brian Armstrong and Rudolf Eigenmann},
+  title = {A Methodology for Scientific Benchmarking with Large-Scale Applications},
+  journal = {MIT Press},
+  year = {2001},
+  pages = {109--127},
+  url = {http://engineering.purdue.edu/paramnt/publications/BenchMeth01.pdf}
+}
+</pre></td>
+</tr>
+<tr id="Aslot01" class="entry">
+	<td>Aslot, V.</td>
+	<td>Performance Characterization of the SPEComp Benchmarks <p class="infolinks">[<a href="javascript:toggleInfo('Aslot01','bibtex')">BibTeX</a>]</p></td>
+	<td>2001</td>
+	<td><i>School</i>: Purdue University&nbsp;</td>
+	<td>mastersthesis</td>
+	<td>&nbsp;</td>
+</tr>
+<tr id="bib_Aslot01" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@mastersthesis{Aslot01,
+  author = {Vishal Aslot},
+  title = {Performance Characterization of the SPEComp Benchmarks},
+  school = {Purdue University},
+  year = {2001}
+}
+</pre></td>
+</tr>
+<tr id="EGSS01" class="entry">
+	<td>Eigenmann, R.</td>
+	<td>Performance Evaluation and Benchmarking with Realistic Applications <p class="infolinks">[<a href="javascript:toggleInfo('EGSS01','bibtex')">BibTeX</a>]</p></td>
+	<td>2001</td>
+	<td>, pp. 40-48&nbsp;</td>
+	<td>inbook</td>
+	<td><a href="http://mitpress.mit.edu/catalog/item/default.asp?tid=3806&ttype=2">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_EGSS01" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inbook{EGSS01,
+  author = {Rudolf Eigenmann },
+  title = {Performance Evaluation and Benchmarking with Realistic Applications},
+  publisher = {MIT Press},
+  year = {2001},
+  pages = {40--48},
+  url = {http://mitpress.mit.edu/catalog/item/default.asp?tid=3806&amp;ttype=2}
+}
+</pre></td>
+</tr>
+<tr id="FFE+01" class="entry">
+	<td>Figueiredo, R.J., Fortes, J.A.B., Eigenmann, R., Kapadia, N.H., Adabala, S., Miguel-Alonso, J., Taylor, V., Vidal, L. &amp; Chen, J.-J.</td>
+	<td>Network Computer for Computer Architecture Education: A Progress Report. Computer Architecture and Programming Courses <p class="infolinks">[<a href="javascript:toggleInfo('FFE+01','bibtex')">BibTeX</a>]</p></td>
+	<td>2001</td>
+	<td>Proceeding of 2001 ASEE Annual Conference &amp; Exposition&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://portal.acm.org/citation.cfm?id=1275263">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_FFE+01" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{FFE+01,
+  author = {Renato J. Figueiredo and Jos&egrave; A. B. Fortes and Rudolf Eigenmann and Nirav H. Kapadia and Sumalatha Adabala and Jose Miguel-Alonso and Valerie Taylor and Luis Vidal and Jan-Jo Chen},
+  title = {Network Computer for Computer Architecture Education: A Progress Report. Computer Architecture and Programming Courses},
+  booktitle = {Proceeding of 2001 ASEE Annual Conference &amp; Exposition},
+  year = {2001},
+  url = {http://portal.acm.org/citation.cfm?id=1275263}
+}
+</pre></td>
+</tr>
+<tr id="KiEi01" class="entry">
+	<td>Kim, S.W. &amp; Eigenmann, R.</td>
+	<td>Where Does the Speedup Go: Quantitative Modeling of Performance Losses in Shared-Memory Programs <p class="infolinks">[<a href="javascript:toggleInfo('KiEi01','bibtex')">BibTeX</a>]</p></td>
+	<td>2001</td>
+	<td>Parallel Processing Letters<br/>Vol. 10(2\&3), pp. 227-238&nbsp;</td>
+	<td>article</td>
+	<td><a href="http://compiler.korea.ac.kr/publication/papers/ppl01.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_KiEi01" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@article{KiEi01,
+  author = {Seon Wook Kim and Rudolf Eigenmann},
+  title = {Where Does the Speedup Go: Quantitative Modeling of Performance Losses in Shared-Memory Programs},
+  journal = {Parallel Processing Letters},
+  year = {2001},
+  volume = {10},
+  number = {2&amp;3},
+  pages = {227--238},
+  url = {http://compiler.korea.ac.kr/publication/papers/ppl01.pdf}
+}
+</pre></td>
+</tr>
+<tr id="PVKE01" class="entry">
+	<td>Park, I., Voss, M.J., Kim, S.W. &amp; Eigenmann, R.</td>
+	<td>Parallel Programming Environment for OpenMP <p class="infolinks">[<a href="javascript:toggleInfo('PVKE01','bibtex')">BibTeX</a>]</p></td>
+	<td>2001</td>
+	<td>Scientific Programming<br/>Vol. 9(2/3), pp. 143-161&nbsp;</td>
+	<td>article</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/ompenv.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_PVKE01" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@article{PVKE01,
+  author = {Insung Park and Michael J. Voss and Seon Wook Kim and Rudolf Eigenmann},
+  title = {Parallel Programming Environment for OpenMP},
+  journal = {Scientific Programming},
+  year = {2001},
+  volume = {9},
+  number = {2/3},
+  pages = {143--161},
+  url = {http://engineering.purdue.edu/paramnt/publications/ompenv.pdf}
+}
+</pre></td>
+</tr>
+<tr id="AsEi01" class="entry">
+	<td>Aslot, V. &amp; Eigenmann, R.</td>
+	<td>Performance Characteristics of the SPEC OMP2001 Benchmarks <p class="infolinks">[<a href="javascript:toggleInfo('AsEi01','bibtex')">BibTeX</a>]</p></td>
+	<td>2001</td>
+	<td>Proc. of the European Third European Workshop on OpenMP (EWOMP'2001), pp. (10)&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/ewomp01.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_AsEi01" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{AsEi01,
+  author = {Vishal Aslot and Rudolf Eigenmann},
+  title = {Performance Characteristics of the SPEC OMP2001 Benchmarks},
+  booktitle = {Proc. of the European Third European Workshop on OpenMP (EWOMP'2001)},
+  year = {2001},
+  pages = {(10)},
+  note = {also published in ACM Computer Architecture News, Vol. 29, No. 5, 2001},
+  url = {http://engineering.purdue.edu/paramnt/publications/ewomp01.pdf}
+}
+</pre></td>
+</tr>
+<tr id="BBG+01" class="entry">
+	<td>Bova, S.W., Breshears, C.P., Gabb, H., Eigenmann, R., Gaertner, G., Kuhn, B., Magro, B. &amp; Salvini, S.</td>
+	<td>Parallel Programming with Message Passing and Directives <p class="infolinks">[<a href="javascript:toggleInfo('BBG+01','bibtex')">BibTeX</a>]</p></td>
+	<td>2001</td>
+	<td>Computation in Science and Engineering, pp. 22-37&nbsp;</td>
+	<td>article</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/MpiOmp01.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_BBG+01" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@article{BBG+01,
+  author = {Steve W. Bova and Clay P. Breshears and Henry Gabb and Rudolf Eigenmann and Greg Gaertner and Bob Kuhn and Bill Magro and Stefano Salvini},
+  title = {Parallel Programming with Message Passing and Directives},
+  journal = {Computation in Science and Engineering},
+  year = {2001},
+  pages = {22--37},
+  url = {http://engineering.purdue.edu/paramnt/publications/MpiOmp01.pdf}
+}
+</pre></td>
+</tr>
+<tr id="ArEi01" class="entry">
+	<td>Armstrong, B. &amp; Eigenmann, R.</td>
+	<td>Challenges in the Automatic Parallelization of Large-scale Computational Applications <p class="infolinks">[<a href="javascript:toggleInfo('ArEi01','bibtex')">BibTeX</a>]</p></td>
+	<td>2001</td>
+	<td><br/>Vol. 4528Commercial Applications for High-Performance Computing, pp. 50-60&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/itcom01.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_ArEi01" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{ArEi01,
+  author = {Brian Armstrong and Rudolf Eigenmann},
+  title = {Challenges in the Automatic Parallelization of Large-scale Computational Applications},
+  booktitle = {Commercial Applications for High-Performance Computing},
+  year = {2001},
+  volume = {4528},
+  pages = {50--60},
+  url = {http://engineering.purdue.edu/paramnt/publications/itcom01.pdf}
+}
+</pre></td>
+</tr>
+<tr id="KiEi01b" class="entry">
+	<td>Kim, S.W. &amp; Eigenmann, R.</td>
+	<td>The Structure of a Compiler for Explicit <em>and</em> Implicit Parallelism <p class="infolinks">[<a href="javascript:toggleInfo('KiEi01b','bibtex')">BibTeX</a>]</p></td>
+	<td>2001</td>
+	<td>Proc. of the Workshop on Languages and Compilers for Parallel Computing(LCPC'01)&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/lcpc01.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_KiEi01b" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{KiEi01b,
+  author = {Seon Wook Kim and Rudolf Eigenmann},
+  title = {The Structure of a Compiler for Explicit <em>and</em> Implicit Parallelism},
+  booktitle = {Proc. of the Workshop on Languages and Compilers for Parallel Computing(LCPC'01)},
+  publisher = {(on CDROM)},
+  year = {2001},
+  url = {http://engineering.purdue.edu/paramnt/publications/lcpc01.pdf}
+}
+</pre></td>
+</tr>
+<tr id="ADE+01" class="entry">
+	<td>Aslot, V., Domeika, M., Eigenmann, R., Gaertner, G., Jones, W.B. &amp; Parady, B.</td>
+	<td>SPEComp: A New Benchmark Suite for Measuring Parallel Computer Performance <p class="infolinks">[<a href="javascript:toggleInfo('ADE+01','bibtex')">BibTeX</a>]</p></td>
+	<td>2001</td>
+	<td>OpenMP Shared-Memory Parallel Programming, pp. 1-10&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/wompat01spec.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_ADE+01" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{ADE+01,
+  author = {Vishal Aslot and Max Domeika and Rudolf Eigenmann and Greg Gaertner and Wesley B. Jones and Bodo Parady},
+  title = {SPEComp: A New Benchmark Suite for Measuring Parallel Computer Performance},
+  booktitle = {OpenMP Shared-Memory Parallel Programming},
+  year = {2001},
+  pages = {1--10},
+  url = {http://engineering.purdue.edu/paramnt/publications/wompat01spec.pdf}
+}
+</pre></td>
+</tr>
+<tr id="MKV+01" class="entry">
+	<td>Min, S.-J., Kim, S.W., Voss, M., Lee, S.-I. &amp; Eigenmann, R.</td>
+	<td>Portable Compilers for OpenMP <p class="infolinks">[<a href="javascript:toggleInfo('MKV+01','bibtex')">BibTeX</a>]</p></td>
+	<td>2001</td>
+	<td>OpenMP Shared-Memory Parallel Programming, pp. 11-19&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/wompat01pcomp.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_MKV+01" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{MKV+01,
+  author = {Seung-Jai Min and Seon Wook Kim and Michael Voss and Sang-Ik Lee and Rudolf Eigenmann},
+  title = {Portable Compilers for OpenMP},
+  booktitle = {OpenMP Shared-Memory Parallel Programming},
+  year = {2001},
+  pages = {11--19},
+  url = {http://engineering.purdue.edu/paramnt/publications/wompat01pcomp.pdf}
+}
+</pre></td>
+</tr>
+<tr id="KOE+01" class="entry">
+	<td>Kim, S.W., liang Ooi, C., Eigenmann, R., Falsafi, B. &amp; Vijaykumar, T.N.</td>
+	<td>Reference Idempotency Analysis: A Framework For Optimizing Speculative Execution <p class="infolinks">[<a href="javascript:toggleInfo('KOE+01','bibtex')">BibTeX</a>]</p></td>
+	<td>2001</td>
+	<td>Proc. of the ACM Symposium on Principles and Practice of Parallel Programming (PPOPP'01), pp. 2-11&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/ppopp01.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_KOE+01" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{KOE+01,
+  author = {Seon Wook Kim and Chong-liang Ooi and Rudolf Eigenmann and Babak Falsafi and T. N. Vijaykumar},
+  title = {Reference Idempotency Analysis: A Framework For Optimizing Speculative Execution},
+  booktitle = {Proc. of the ACM Symposium on Principles and Practice of Parallel Programming (PPOPP'01)},
+  publisher = {ACM Press},
+  year = {2001},
+  pages = {2--11},
+  url = {http://engineering.purdue.edu/paramnt/publications/ppopp01.pdf}
+}
+</pre></td>
+</tr>
+<tr id="OKE+01" class="entry">
+	<td>Ooi, C.-L., Kim, S.W., Eigenmann, R., Falsafi, B. &amp; Vijaykumar, T.N.</td>
+	<td>Multiplex: Unifying Conventional and Speculative Thread-Level Parallelism on a Chip Multiprocessor <p class="infolinks">[<a href="javascript:toggleInfo('OKE+01','bibtex')">BibTeX</a>]</p></td>
+	<td>2001</td>
+	<td>Proc. of the International Conference on Supercomputing, ICS'01, pp. 368-380&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/ics01.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_OKE+01" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{OKE+01,
+  author = {Chong-Liang Ooi and Seon Wook Kim and Rudolf Eigenmann and Babak Falsafi and T. N. Vijaykumar},
+  title = {Multiplex: Unifying Conventional and Speculative Thread-Level Parallelism on a Chip Multiprocessor},
+  booktitle = {Proc. of the International Conference on Supercomputing, ICS'01},
+  publisher = {ACM Press},
+  year = {2001},
+  pages = {368--380},
+  url = {http://engineering.purdue.edu/paramnt/publications/ics01.pdf}
+}
+</pre></td>
+</tr>
+<tr id="VoEi01" class="entry">
+	<td>Voss, M.J. &amp; Eigenmann, R.</td>
+	<td>High-Level Adaptive Program Optimization with ADAPT <p class="infolinks">[<a href="javascript:toggleInfo('VoEi01','bibtex')">BibTeX</a>]</p></td>
+	<td>2001</td>
+	<td>Proc. of the ACM Symposium on Principles and Practice of Parallel Programming (PPOPP'01), pp. 93-102&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/ppopp01b.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_VoEi01" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{VoEi01,
+  author = {Michael J. Voss and Rudolf Eigenmann},
+  title = {High-Level Adaptive Program Optimization with ADAPT},
+  booktitle = {Proc. of the ACM Symposium on Principles and Practice of Parallel Programming (PPOPP'01)},
+  publisher = {ACM Press},
+  year = {2001},
+  pages = {93--102},
+  url = {http://engineering.purdue.edu/paramnt/publications/ppopp01b.pdf}
+}
+</pre></td>
+</tr>
+<tr id="Eig00b" class="entry">
+	<td>Eigenman, R.</td>
+	<td>Encyclopedia of Computer Science, fourth Edition <p class="infolinks">[<a href="javascript:toggleInfo('Eig00b','bibtex')">BibTeX</a>]</p></td>
+	<td>2000</td>
+	<td>, pp. 137-141&nbsp;</td>
+	<td>inbook</td>
+	<td>&nbsp;</td>
+</tr>
+<tr id="bib_Eig00b" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inbook{Eig00b,
+  author = {Rudolf Eigenman},
+  title = {Encyclopedia of Computer Science, fourth Edition},
+  publisher = {Nature Publishing Group},
+  year = {2000},
+  pages = {137--141}
+}
+</pre></td>
+</tr>
+<tr id="EiHo00" class="entry">
+	<td>Eigenmann, R. &amp; Hoeflinger, J.</td>
+	<td>Wiley Encyclopedia of Electrical and Electronics Engineering <p class="infolinks">[<a href="javascript:toggleInfo('EiHo00','bibtex')">BibTeX</a>]</p></td>
+	<td>2000</td>
+	<td>, pp. (20)&nbsp;</td>
+	<td>inbook</td>
+	<td>&nbsp;</td>
+</tr>
+<tr id="bib_EiHo00" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inbook{EiHo00,
+  author = {Rudolf Eigenmann and Jay Hoeflinger},
+  title = {Wiley Encyclopedia of Electrical and Electronics Engineering},
+  publisher = {John Wiley &amp; Sons, Inc.},
+  year = {2000},
+  pages = {(20)}
+}
+</pre></td>
+</tr>
+<tr id="EiVo01" class="entry">
+	<td>Eigenmann, R. &amp; Voss, M.</td>
+	<td>Toward a Compilation Paradigm for Computational Applications on the Information Power Grid <p class="infolinks">[<a href="javascript:toggleInfo('EiVo01','bibtex')">BibTeX</a>]</p></td>
+	<td>2000</td>
+	<td>Mathematics and Computers in Simulation<br/>Vol. 54(4-5), pp. 307-320&nbsp;</td>
+	<td>article</td>
+	<td>&nbsp;</td>
+</tr>
+<tr id="bib_EiVo01" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@article{EiVo01,
+  author = {Rudolf Eigenmann and Michael Voss},
+  title = {Toward a Compilation Paradigm for Computational Applications on the Information Power Grid},
+  journal = {Mathematics and Computers in Simulation},
+  year = {2000},
+  volume = {54},
+  number = {4--5},
+  pages = {307--320}
+}
+</pre></td>
+</tr>
+<tr id="KVE20" class="entry">
+	<td>Kim, S.W., Voss, M. &amp; Eigenmann, R.</td>
+	<td>Performance Analysis of Compiler-Parallelized Programs on Shared-Memory Multiprocessors <p class="infolinks">[<a href="javascript:toggleInfo('KVE20','bibtex')">BibTeX</a>]</p></td>
+	<td>2000</td>
+	<td>Proceedings of CPC2000 Compilers for Parallel Computers, pp. 305&nbsp;</td>
+	<td>inproceedings</td>
+	<td>&nbsp;</td>
+</tr>
+<tr id="bib_KVE20" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{KVE20,
+  author = {Seon Wook Kim and Michael Voss and Rudolf Eigenmann},
+  title = {Performance Analysis of Compiler-Parallelized Programs on Shared-Memory Multiprocessors},
+  booktitle = {Proceedings of CPC2000 Compilers for Parallel Computers},
+  year = {2000},
+  pages = {305}
+}
+</pre></td>
+</tr>
+<tr id="KoPa+00" class="entry">
+	<td>Kortmann, S., Park, I., Voss, M. &amp; Eigenmann, R.</td>
+	<td>Interactive and Modular Optimization with InterPol <p class="infolinks">[<a href="javascript:toggleInfo('KoPa+00','bibtex')">BibTeX</a>]</p></td>
+	<td>2000</td>
+	<td>Proc. of the Int'l Conference on Parallel and Distributed Processing Techniques and Applications, pp. 5&nbsp;</td>
+	<td>inproceedings</td>
+	<td>&nbsp;</td>
+</tr>
+<tr id="bib_KoPa+00" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{KoPa+00,
+  author = {Stefan Kortmann and Insung Park and Michael Voss and Rudolf Eigenmann},
+  title = {Interactive and Modular Optimization with InterPol},
+  booktitle = {Proc. of the Int'l Conference on Parallel and Distributed Processing Techniques and Applications},
+  year = {2000},
+  pages = {5}
+}
+</pre></td>
+</tr>
+<tr id="VoEi00a" class="entry">
+	<td>Voss, M. &amp; Eigenmann, R.</td>
+	<td>Adapt: Automated De-Coupled Adaptive Program Transformation <p class="infolinks">[<a href="javascript:toggleInfo('VoEi00a','bibtex')">BibTeX</a>]</p></td>
+	<td>2000</td>
+	<td>Proc. of the Int'l Conf. on Parallel Processing, pp. 163-170&nbsp;</td>
+	<td>inproceedings</td>
+	<td>&nbsp;</td>
+</tr>
+<tr id="bib_VoEi00a" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{VoEi00a,
+  author = {Michael Voss and Rudolf Eigenmann},
+  title = {Adapt: Automated De-Coupled Adaptive Program Transformation},
+  booktitle = {Proc. of the Int'l Conf. on Parallel Processing},
+  year = {2000},
+  pages = {163--170}
+}
+</pre></td>
+</tr>
+<tr id="VoYa+00" class="entry">
+	<td>Voss, M.J., Yau, K.W. &amp; Eigenmann, R.</td>
+	<td>Interactive Instrumentation and Tuning of OpenMP Programs <p class="infolinks">[<a href="javascript:toggleInfo('VoYa+00','bibtex')">BibTeX</a>]</p></td>
+	<td>2000</td>
+	<td>Proc. of the Int'l Conference on Parallel and Distributed Processing Techniques and Applications, pp. 7&nbsp;</td>
+	<td>inproceedings</td>
+	<td>&nbsp;</td>
+</tr>
+<tr id="bib_VoYa+00" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{VoYa+00,
+  author = {Michael J. Voss and Kwok Wai Yau and Rudolf Eigenmann},
+  title = {Interactive Instrumentation and Tuning of OpenMP Programs},
+  booktitle = {Proc. of the Int'l Conference on Parallel and Distributed Processing Techniques and Applications},
+  year = {2000},
+  pages = {7}
+}
+</pre></td>
+</tr>
+<tr id="PKF+00" class="entry">
+	<td>Park, I., Kapadia, N.H., Figueiredo, R.J., Eigenmann, R. &amp; Fortes, J.A.B.</td>
+	<td>Towards an Integrated, Web-executable Parallel Programming Tool Environment <p class="infolinks">[<a href="javascript:toggleInfo('PKF+00','bibtex')">BibTeX</a>]</p></td>
+	<td>2000</td>
+	<td>Proc. of SC2000: High-Performance Computing and Networking Conference, pp. 12&nbsp;</td>
+	<td>inproceedings</td>
+	<td>&nbsp;</td>
+</tr>
+<tr id="bib_PKF+00" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{PKF+00,
+  author = {Insung Park and Nirav H. Kapadia and Renato J. Figueiredo and Rudolf Eigenmann and Jos&eacute; A. B. Fortes},
+  title = {Towards an Integrated, Web-executable Parallel Programming Tool Environment},
+  booktitle = {Proc. of SC2000: High-Performance Computing and Networking Conference},
+  year = {2000},
+  pages = {12}
+}
+</pre></td>
+</tr>
+<tr id="AKE00" class="entry">
+	<td>Armstrong, B., Kim, S.W. &amp; Eigenmann, R.</td>
+	<td>Quantifying Differences between OpenMP and MPI Using a Large-Scale Application Suite <p class="infolinks">[<a href="javascript:toggleInfo('AKE00','bibtex')">BibTeX</a>]</p></td>
+	<td>2000</td>
+	<td>Proc. of the third International Symposium on High Performance Computing, Lecture Notes in Computer Science 1940, pp. 482-493&nbsp;</td>
+	<td>inproceedings</td>
+	<td>&nbsp;</td>
+</tr>
+<tr id="bib_AKE00" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{AKE00,
+  author = {Brian Armstrong and Seon Wook Kim and Rudolf Eigenmann},
+  title = {Quantifying Differences between OpenMP and MPI Using a Large-Scale Application Suite},
+  booktitle = {Proc. of the third International Symposium on High Performance Computing, Lecture Notes in Computer Science 1940},
+  publisher = {Springer Verlag},
+  year = {2000},
+  pages = {482--493}
+}
+</pre></td>
+</tr>
+<tr id="GEK00" class="entry">
+	<td>Gaertner, G., Eigenmann, R. &amp; Dixit, K.</td>
+	<td>Beyond the Cloak and Dagger: Credible, Repeatable Benchmarks <p class="infolinks">[<a href="javascript:toggleInfo('GEK00','bibtex')">BibTeX</a>]</p></td>
+	<td>2000</td>
+	<td>Scientific Computing and Instrumentation, pp. 6&nbsp;</td>
+	<td>article</td>
+	<td>&nbsp;</td>
+</tr>
+<tr id="bib_GEK00" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@article{GEK00,
+  author = {Greg Gaertner and Rudolf Eigenmann and Kaivalya Dixit},
+  title = {Beyond the Cloak and Dagger: Credible, Repeatable Benchmarks},
+  journal = {Scientific Computing and Instrumentation},
+  year = {2000},
+  pages = {6}
+}
+</pre></td>
+</tr>
+<tr id="KiEi00a" class="entry">
+	<td>Kim, S.W. &amp; Eigenmann, R.</td>
+	<td>Compiler Techniques for Energy Saving in Instruction Caches of Speculative Parallel Microarchitectures <p class="infolinks">[<a href="javascript:toggleInfo('KiEi00a','bibtex')">BibTeX</a>]</p></td>
+	<td>2000</td>
+	<td>Proc. of the Int'l Conference on Parallel Processing, pp. 77-84&nbsp;</td>
+	<td>inproceedings</td>
+	<td>&nbsp;</td>
+</tr>
+<tr id="bib_KiEi00a" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{KiEi00a,
+  author = {Seon Wook Kim and Rudolf Eigenmann},
+  title = {Compiler Techniques for Energy Saving in Instruction Caches of Speculative Parallel Microarchitectures},
+  booktitle = {Proc. of the Int'l Conference on Parallel Processing},
+  year = {2000},
+  pages = {77--84}
+}
+</pre></td>
+</tr>
+<tr id="KiEi00b" class="entry">
+	<td>Kim, S.W., Park, I. &amp; Eigenmann, R.</td>
+	<td>A Performance Advisor Tool for Shared-Memory Parallel Programming <p class="infolinks">[<a href="javascript:toggleInfo('KiEi00b','bibtex')">BibTeX</a>]</p></td>
+	<td>2000</td>
+	<td>Proc. of the Workshop on Languages and Compilers for Parallel Computing, pp. (15 pages)&nbsp;</td>
+	<td>inproceedings</td>
+	<td>&nbsp;</td>
+</tr>
+<tr id="bib_KiEi00b" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{KiEi00b,
+  author = {Seon Wook Kim and Insung Park and Rudolf Eigenmann},
+  title = {A Performance Advisor Tool for Shared-Memory Parallel Programming},
+  booktitle = {Proc. of the Workshop on Languages and Compilers for Parallel Computing},
+  year = {2000},
+  pages = {(15 pages)}
+}
+</pre></td>
+</tr>
+<tr id="PaEi00" class="entry">
+	<td>Park, I. &amp; Eigenmann, R.</td>
+	<td>Supporting Users' Reasoning in Performance Evaluation and Tuning of Parallel Applications <p class="infolinks">[<a href="javascript:toggleInfo('PaEi00','bibtex')">BibTeX</a>]</p></td>
+	<td>2000</td>
+	<td>Proc. of the International Conference on Parallel and Distributed Computing Systems, pp. 346-351&nbsp;</td>
+	<td>inproceedings</td>
+	<td>&nbsp;</td>
+</tr>
+<tr id="bib_PaEi00" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{PaEi00,
+  author = {Insung Park and Rudolf Eigenmann},
+  title = {Supporting Users' Reasoning in Performance Evaluation and Tuning of Parallel Applications},
+  booktitle = {Proc. of the International Conference on Parallel and Distributed Computing Systems},
+  year = {2000},
+  pages = {346--351}
+}
+</pre></td>
+</tr>
+<tr id="FFE+00" class="entry">
+	<td>Figueiredo, R.J., Fortes, J.A.B., Eigenmann, R., Kapadia, N., Adabala, S., Miguel-Alonso, J., Taylor, V., Livny, M., Vidal, L., Chen, J.-J., Figueiredo, R.J., Fortes, J.A.B., Eigenmann, R., Kapadia, N.H., Adabala, S., Miguel-Alonso, J., Taylor, V., Livny, M., Vidal, L. &amp; Chen, J.-J.</td>
+	<td>A Network-Computing Infrastructure for Tool Experimentation Applied to Computer Architecture Education <p class="infolinks">[<a href="javascript:toggleInfo('FFE+00','bibtex')">BibTeX</a>]</p></td>
+	<td>2000</td>
+	<td>Proc. of the Workshop on Computer Architecture Education, 27th International Symposium on Computer Architecture&nbsp;</td>
+	<td>inproceedings</td>
+	<td>&nbsp;</td>
+</tr>
+<tr id="bib_FFE+00" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{FFE+00,
+  author = {Renato J. Figueiredo and Jos&eacute; A. B. Fortes and Rudolf Eigenmann and Nirav Kapadia and Sumalatha Adabala and Jose Miguel-Alonso and Valerie Taylor and Miron Livny and Luis Vidal and Jan-Jo Chen and Renato J. Figueiredo and Jos&egrave; A. B. Fortes and Rudolf Eigenmann and Nirav H. Kapadia and Sumalatha Adabala and Jose Miguel-Alonso and Valerie Taylor and Miron Livny and Luis Vidal and Jan-Jo Chen},
+  title = {A Network-Computing Infrastructure for Tool Experimentation Applied to Computer Architecture Education},
+  booktitle = {Proc. of the Workshop on Computer Architecture Education, 27th International Symposium on Computer Architecture},
+  year = {2000}
+}
+</pre></td>
+</tr>
+<tr id="FKE+00" class="entry">
+	<td>Fortes, J.A.B., Kapadia, N.H., Eigenmann, R., Figueiredo, R.J., Taylor, V., Choudhary, A., Vidal, L. &amp; Chen, J.-J.</td>
+	<td>On the Use of Simulation and Parallelization Tools in Computer Architecture and Programming Courses <p class="infolinks">[<a href="javascript:toggleInfo('FKE+00','bibtex')">BibTeX</a>]</p></td>
+	<td>2000</td>
+	<td>Proceeding of 2000 ASEE Annual Conference &amp; Exposition&nbsp;</td>
+	<td>inproceedings</td>
+	<td>&nbsp;</td>
+</tr>
+<tr id="bib_FKE+00" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{FKE+00,
+  author = {Jos&egrave; A. B. Fortes and Nirav H. Kapadia and Rudolf Eigenmann and Renato J. Figueiredo and Valerie Taylor and Alok Choudhary and Luis Vidal and Jan-Jo Chen},
+  title = {On the Use of Simulation and Parallelization Tools in Computer Architecture and Programming Courses},
+  booktitle = {Proceeding of 2000 ASEE Annual Conference &amp; Exposition},
+  year = {2000}
+}
+</pre></td>
+</tr>
+<tr id="VoEi00c" class="entry">
+	<td>Voss, M.J. &amp; Eigenmann, R.</td>
+	<td>A Framework for Remote Dynamic Program Optimization <p class="infolinks">[<a href="javascript:toggleInfo('VoEi00c','bibtex')">BibTeX</a>]</p></td>
+	<td>2000</td>
+	<td>Proceedings of the ACM SIGPLAN Workshop on Dynamic and Adaptive Compilation and Optimization (Dynamo'00, held in conjunction with POPL'00), pp. 32-40&nbsp;</td>
+	<td>inproceedings</td>
+	<td>&nbsp;</td>
+</tr>
+<tr id="bib_VoEi00c" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{VoEi00c,
+  author = {Michael J. Voss and Rudolf Eigenmann},
+  title = {A Framework for Remote Dynamic Program Optimization},
+  booktitle = {Proceedings of the ACM SIGPLAN Workshop on Dynamic and Adaptive Compilation and Optimization (Dynamo'00, held in conjunction with POPL'00)},
+  year = {2000},
+  pages = {32--40}
+}
+</pre></td>
+</tr>
+<tr id="EiLi99" class="entry">
+	<td>Eigenmann, R. &amp; Lilja, D.J.</td>
+	<td>Wiley Encyclopedia of Electrical and Electronics Engineering <p class="infolinks">[<a href="javascript:toggleInfo('EiLi99','bibtex')">BibTeX</a>]</p></td>
+	<td>1999</td>
+	<td><br/>Vol. 23, pp. 387-400&nbsp;</td>
+	<td>inbook</td>
+	<td>&nbsp;</td>
+</tr>
+<tr id="bib_EiLi99" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inbook{EiLi99,
+  author = {Rudolf Eigenmann and David J. Lilja},
+  title = {Wiley Encyclopedia of Electrical and Electronics Engineering},
+  publisher = {John Wiley &amp; Sons, Inc.},
+  year = {1999},
+  volume = {23},
+  pages = {387--400}
+}
+</pre></td>
+</tr>
+<tr id="FKEF+99" class="entry">
+	<td>Fortes, J.A.B., Kapadia, N.H., Eigenmann, R., Figueiredo, R.J., Taylor, V., Choudhary, A., Vidal, L. &amp; Chen, J.-J.</td>
+	<td>On the Integration of Computer Architecture and Parallel Programming Tools Into Computer Curricula <p class="infolinks">[<a href="javascript:toggleInfo('FKEF+99','bibtex')">BibTeX</a>]</p></td>
+	<td>1999</td>
+	<td>Proceedings of the 1999 Annual Society for Engineering Education Conference&nbsp;</td>
+	<td>inproceedings</td>
+	<td>&nbsp;</td>
+</tr>
+<tr id="bib_FKEF+99" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{FKEF+99,
+  author = {J. A. B. Fortes and N. H. Kapadia and R. Eigenmann and R. J. Figueiredo and V. Taylor and A. Choudhary and L. Vidal and J.-J. Chen},
+  title = {On the Integration of Computer Architecture and Parallel Programming Tools Into Computer Curricula},
+  booktitle = {Proceedings of the 1999 Annual Society for Engineering Education Conference},
+  year = {1999}
+}
+</pre></td>
+</tr>
+<tr id="KeEi98" class="entry">
+	<td>Kennell, R.L. &amp; Eigenmann, R.</td>
+	<td>Automatic Parallelization of C by Means of Language Transcription <p class="infolinks">[<a href="javascript:toggleInfo('KeEi98','bibtex')">BibTeX</a>]</p></td>
+	<td>1999</td>
+	<td>Lecture Notes in Computer Science 1656, pp. 166-180&nbsp;</td>
+	<td>inproceedings</td>
+	<td>&nbsp;</td>
+</tr>
+<tr id="bib_KeEi98" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{KeEi98,
+  author = {Richard L. Kennell and Rudolf Eigenmann},
+  title = {Automatic Parallelization of C by Means of Language Transcription},
+  booktitle = {Lecture Notes in Computer Science 1656},
+  year = {1999},
+  pages = {166--180}
+}
+</pre></td>
+</tr>
+<tr id="Bench99" class="entry">
+	<td>University, P.</td>
+	<td>Characterization Repository of the SPEC High-Performance-Computing Benchmarks <p class="infolinks">[<a href="javascript:toggleInfo('Bench99','bibtex')">BibTeX</a>]</p></td>
+	<td>1999</td>
+	<td>http://www.ece.purdue.edu/Paramount/BenchInfo&nbsp;</td>
+	<td>misc</td>
+	<td>&nbsp;</td>
+</tr>
+<tr id="bib_Bench99" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@misc{Bench99,
+  author = {Purdue University},
+  title = {Characterization Repository of the SPEC High-Performance-Computing Benchmarks},
+  year = {1999}
+}
+</pre></td>
+</tr>
+<tr id="VoEi99b" class="entry">
+	<td>Voss, M.J. &amp; Eigenmann, R.</td>
+	<td>Reducing Parallel Overheads Through Dynamic Serialization <p class="infolinks">[<a href="javascript:toggleInfo('VoEi99b','bibtex')">BibTeX</a>]</p></td>
+	<td>1999</td>
+	<td>Int'l Parallel Processing Symposium, pp. 88-92&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/voei98.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_VoEi99b" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{VoEi99b,
+  author = {Michael J. Voss and Rudolf Eigenmann},
+  title = {Reducing Parallel Overheads Through Dynamic Serialization},
+  booktitle = {Int'l Parallel Processing Symposium},
+  year = {1999},
+  pages = {88--92},
+  url = {http://engineering.purdue.edu/paramnt/publications/voei98.pdf}
+}
+</pre></td>
+</tr>
+<tr id="BBG+99" class="entry">
+	<td>Bova, S.W., Breshears, C.P., Gabb, H., Eigenmann, R., Gaertner, G., Kuhn, B., Magro, B. &amp; Salvini, S.</td>
+	<td>Parallel Programming with Message Passing and Directives <p class="infolinks">[<a href="javascript:toggleInfo('BBG+99','bibtex')">BibTeX</a>]</p></td>
+	<td>1999</td>
+	<td>SIAM News<br/>Vol. 11&nbsp;</td>
+	<td>article</td>
+	<td>&nbsp;</td>
+</tr>
+<tr id="bib_BBG+99" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@article{BBG+99,
+  author = {Steve W. Bova and Clay P. Breshears and Henry Gabb and Rudolf Eigenmann and Greg Gaertner and Bob Kuhn and Bill Magro and Stefano Salvini},
+  title = {Parallel Programming with Message Passing and Directives},
+  journal = {SIAM News},
+  year = {1999},
+  volume = {11}
+}
+</pre></td>
+</tr>
+<tr id="KiEi99" class="entry">
+	<td>Kim, S.W. &amp; Eigenmann, R.</td>
+	<td>Compiling for Speculative Architectures <p class="infolinks">[<a href="javascript:toggleInfo('KiEi99','bibtex')">BibTeX</a>]</p></td>
+	<td>1999</td>
+	<td>Proc. of the 12th Int'l Workshop on Languages and Compilers for Parallel Computing, San Diago, Calif.&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/lcpc99.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_KiEi99" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{KiEi99,
+  author = {Seon Wook Kim and Rudolf Eigenmann},
+  title = {Compiling for Speculative Architectures},
+  booktitle = {Proc. of the 12th Int'l Workshop on Languages and Compilers for Parallel Computing, San Diago, Calif.},
+  year = {1999},
+  url = {http://engineering.purdue.edu/paramnt/publications/lcpc99.pdf}
+}
+</pre></td>
+</tr>
+<tr id="DEFK99" class="entry">
+	<td>Downar, T.J., Eigenmann, R., Fortes, J.A.B. &amp; Kapadia, N.H.</td>
+	<td>Issues and Approaches in Parallel Multi-Component and Multi-Physics Simulations <p class="infolinks">[<a href="javascript:toggleInfo('DEFK99','bibtex')">BibTeX</a>]</p></td>
+	<td>1999</td>
+	<td>Proc. of the 1999 International Conference on Parallel and Distributed Processing Techniques and Applications (PDPTA'99), pp. 916-922&nbsp;</td>
+	<td>inproceedings</td>
+	<td>&nbsp;</td>
+</tr>
+<tr id="bib_DEFK99" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DEFK99,
+  author = {Thomas J. Downar and Rudolf Eigenmann and Jos&eacute; A. B. Fortes and Nirav H. Kapadia},
+  title = {Issues and Approaches in Parallel Multi-Component and Multi-Physics Simulations},
+  booktitle = {Proc. of the 1999 International Conference on Parallel and Distributed Processing Techniques and Applications (PDPTA'99)},
+  year = {1999},
+  pages = {916--922}
+}
+</pre></td>
+</tr>
+<tr id="VoEi99a" class="entry">
+	<td>Voss, M. &amp; Eigenmann, R.</td>
+	<td>Dynamically Adaptive Parallel Programs <p class="infolinks">[<a href="javascript:toggleInfo('VoEi99a','bibtex')">BibTeX</a>]</p></td>
+	<td>1999</td>
+	<td>International Symposium on High Performance Computing, pp. 109-120&nbsp;</td>
+	<td>inproceedings</td>
+	<td>&nbsp;</td>
+</tr>
+<tr id="bib_VoEi99a" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{VoEi99a,
+  author = {Michael Voss and Rudolf Eigenmann},
+  title = {Dynamically Adaptive Parallel Programs},
+  booktitle = {International Symposium on High Performance Computing},
+  year = {1999},
+  pages = {109--120}
+}
+</pre></td>
+</tr>
+<tr id="AKP+97" class="entry">
+	<td>Armstrong, B., Kim, S.W., Park, I., Voss, M. &amp; Eigenmann, R.</td>
+	<td>Compiler-Based Tools for Analyzing Parallel Programs <p class="infolinks">[<a href="javascript:toggleInfo('AKP+97','bibtex')">BibTeX</a>]</p></td>
+	<td>1998</td>
+	<td>Parallel Computing<br/>Vol. 24, pp. 401-420&nbsp;</td>
+	<td>article</td>
+	<td>&nbsp;</td>
+</tr>
+<tr id="bib_AKP+97" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@article{AKP+97,
+  author = {Brian Armstrong and Seon Wook Kim and Insung Park and Michael Voss and Rudolf Eigenmann},
+  title = {Compiler-Based Tools for Analyzing Parallel Programs},
+  journal = {Parallel Computing},
+  year = {1998},
+  volume = {24},
+  pages = {401--420}
+}
+</pre></td>
+</tr>
+<tr id="BlEi98" class="entry">
+	<td>Blume, W. &amp; Eigenmann, R.</td>
+	<td>Non-Linear and Symbolic Data Dependence Testing <p class="infolinks">[<a href="javascript:toggleInfo('BlEi98','bibtex')">BibTeX</a>]</p></td>
+	<td>1998</td>
+	<td>IEEE Transactions on Parallel and Distributed Systems<br/>Vol. 9(12), pp. 1180-1194&nbsp;</td>
+	<td>article</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/rt.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_BlEi98" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@article{BlEi98,
+  author = {William Blume and Rudolf Eigenmann},
+  title = {Non-Linear and Symbolic Data Dependence Testing},
+  journal = {IEEE Transactions on Parallel and Distributed Systems},
+  year = {1998},
+  volume = {9},
+  number = {12},
+  pages = {1180--1194},
+  url = {http://engineering.purdue.edu/paramnt/publications/rt.pdf}
+}
+</pre></td>
+</tr>
+<tr id="Jia98" class="entry">
+	<td>Jiang, H.</td>
+	<td>A Portable Runtime Library for Loop-Parallelism on Pthreads and Solaris <p class="infolinks">[<a href="javascript:toggleInfo('Jia98','bibtex')">BibTeX</a>]</p></td>
+	<td>1998</td>
+	<td><i>School</i>: School of Electrical and Computer Engineering, Purdue University&nbsp;</td>
+	<td>mastersthesis</td>
+	<td>&nbsp;</td>
+</tr>
+<tr id="bib_Jia98" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@mastersthesis{Jia98,
+  author = {Hui Jiang},
+  title = {A Portable Runtime Library for Loop-Parallelism on Pthreads and Solaris},
+  school = {School of Electrical and Computer Engineering, Purdue University},
+  year = {1998},
+  note = {in preparation}
+}
+</pre></td>
+</tr>
+<tr id="KMME98" class="entry">
+	<td>Kuhn, R., Menon, R., Mattson, T. &amp; Eigenmann, R.</td>
+	<td>OpenMP Parallel Programming <p class="infolinks">[<a href="javascript:toggleInfo('KMME98','bibtex')">BibTeX</a>]</p></td>
+	<td>1998</td>
+	<td>Tutorial at the Supercomputing'98 Conference. Also available at http://www.openmp.org/presentations/index.cgi?sc98tutorial&nbsp;</td>
+	<td>inproceedings</td>
+	<td>&nbsp;</td>
+</tr>
+<tr id="bib_KMME98" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{KMME98,
+  author = {Robert Kuhn and Ramesh Menon and Tim Mattson and Rudolf Eigenmann},
+  title = {OpenMP Parallel Programming},
+  booktitle = {Tutorial at the Supercomputing'98 Conference. Also available at http://www.openmp.org/presentations/index.cgi?sc98tutorial},
+  year = {1998}
+}
+</pre></td>
+</tr>
+<tr id="PaEi97" class="entry">
+	<td>Park, I. &amp; Eigenmann, R.</td>
+	<td>sc Ursa Major: Exploring Web Technology for Design and Evaluation of High-Performance Systems <p class="infolinks">[<a href="javascript:toggleInfo('PaEi97','bibtex')">BibTeX</a>]</p></td>
+	<td>1998</td>
+	<td>Int'l Conf. on High-Performance Computing and Networking, Lecture Notes in Computer Science 1401, pp. 535-544&nbsp;</td>
+	<td>inproceedings</td>
+	<td>&nbsp;</td>
+</tr>
+<tr id="bib_PaEi97" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{PaEi97,
+  author = {Insung Park and Rudolf Eigenmann},
+  title = {sc Ursa Major: Exploring Web Technology for Design and Evaluation of High-Performance Systems},
+  booktitle = {Int'l Conf. on High-Performance Computing and Networking, Lecture Notes in Computer Science 1401},
+  year = {1998},
+  pages = {535--544}
+}
+</pre></td>
+</tr>
+<tr id="PVAE97" class="entry">
+	<td>Park, I., Voss, M.J., Armstrong, B. &amp; Eigenmann, R.</td>
+	<td>Interactive Compilation and Performance Analysis with Ursa Minor <p class="infolinks">[<a href="javascript:toggleInfo('PVAE97','bibtex')">BibTeX</a>]</p></td>
+	<td>1998</td>
+	<td>Lecture Notes in Computer Science, 1366, pp. 163-176&nbsp;</td>
+	<td>inproceedings</td>
+	<td>&nbsp;</td>
+</tr>
+<tr id="bib_PVAE97" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{PVAE97,
+  author = {Insung Park and Michael J. Voss and Brian Armstrong and Rudolf Eigenmann},
+  title = {Interactive Compilation and Performance Analysis with Ursa Minor},
+  booktitle = {Lecture Notes in Computer Science, 1366},
+  year = {1998},
+  pages = {163--176}
+}
+</pre></td>
+</tr>
+<tr id="PVAE98" class="entry">
+	<td>Park, I., Voss, M.J., Armstrong, B. &amp; Eigenmann, R.</td>
+	<td>Parallel Programming and Performance Evaluation with The sc Ursa Tool Family <p class="infolinks">[<a href="javascript:toggleInfo('PVAE98','bibtex')">BibTeX</a>]</p></td>
+	<td>1998</td>
+	<td>Int'l Journal of Parallel Programming<br/>Vol. 26(5), pp. 541-561&nbsp;</td>
+	<td>article</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/ijpp.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_PVAE98" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@article{PVAE98,
+  author = {Insung Park and Michael J. Voss and Brian Armstrong and Rudolf Eigenmann},
+  title = {Parallel Programming and Performance Evaluation with The sc Ursa Tool Family},
+  journal = {Int'l Journal of Parallel Programming},
+  year = {1998},
+  volume = {26},
+  number = {5},
+  pages = {541--561},
+  url = {http://engineering.purdue.edu/paramnt/publications/ijpp.pdf}
+}
+</pre></td>
+</tr>
+<tr id="Arm98" class="entry">
+	<td>Armstrong, B.</td>
+	<td>Understanding the Performance of large Computer Applications from a Computer Systems Perspective <p class="infolinks">[<a href="javascript:toggleInfo('Arm98','bibtex')">BibTeX</a>]</p></td>
+	<td>1998</td>
+	<td><i>School</i>: School of Electrical and Computer Engineering, Purdue University&nbsp;</td>
+	<td>mastersthesis</td>
+	<td>&nbsp;</td>
+</tr>
+<tr id="bib_Arm98" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@mastersthesis{Arm98,
+  author = {Brian Armstrong},
+  title = {Understanding the Performance of large Computer Applications from a Computer Systems Perspective},
+  school = {School of Electrical and Computer Engineering, Purdue University},
+  year = {1998}
+}
+</pre></td>
+</tr>
+<tr id="FFB+98" class="entry">
+	<td>Figueiredo, R.J.O., Fortes, J.A.B., Miled, Z.B., Taylor, V. &amp; Eigenmann, R.</td>
+	<td>Impact of Computing-in-Memory on the Performance of Processor-and-Memory Hierarchies <p class="infolinks">[<a href="javascript:toggleInfo('FFB+98','bibtex')">BibTeX</a>]</p></td>
+	<td>1998</td>
+	<td>Proc. 11th Int'l. Conf. on Parallel and Distr. Computing Systems (PDCS-98), pp. 43-50&nbsp;</td>
+	<td>inproceedings</td>
+	<td>&nbsp;</td>
+</tr>
+<tr id="bib_FFB+98" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{FFB+98,
+  author = {Renato J. O. Figueiredo and Jos&eacute; A. B. Fortes and Zina Ben Miled and Valerie Taylor and Rudolf Eigenmann},
+  title = {Impact of Computing-in-Memory on the Performance of Processor-and-Memory Hierarchies},
+  booktitle = {Proc. 11th Int'l. Conf. on Parallel and Distr. Computing Systems (PDCS-98)},
+  year = {1998},
+  pages = {43--50}
+}
+</pre></td>
+</tr>
+<tr id="ArEi98" class="entry">
+	<td>Armstrong, B. &amp; Eigenmann, R.</td>
+	<td>Performance Forecasting: Towards a Methodology for Characterizing Large Computational Applications <p class="infolinks">[<a href="javascript:toggleInfo('ArEi98','bibtex')">BibTeX</a>]</p></td>
+	<td>1998</td>
+	<td>Proc. of the Int'l Conf. on Parallel Processing, pp. 518-525&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/perfore.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_ArEi98" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{ArEi98,
+  author = {Brian Armstrong and Rudolf Eigenmann},
+  title = {Performance Forecasting: Towards a Methodology for Characterizing Large Computational Applications},
+  booktitle = {Proc. of the Int'l Conf. on Parallel Processing},
+  year = {1998},
+  pages = {518--525},
+  url = {http://engineering.purdue.edu/paramnt/publications/perfore.pdf}
+}
+</pre></td>
+</tr>
+<tr id="EiHP94" class="entry">
+	<td>Eigenmann, R., Hoeflinger, J. &amp; Padua, D.</td>
+	<td>On the Automatic Parallelization of the Perfect Benchmarks <p class="infolinks">[<a href="javascript:toggleInfo('EiHP94','bibtex')">BibTeX</a>]</p></td>
+	<td>1998</td>
+	<td>#DP#<br/>Vol. 9(1), pp. 5-23&nbsp;</td>
+	<td>article</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/1392.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_EiHP94" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@article{EiHP94,
+  author = {Rudolf Eigenmann and Jay Hoeflinger and David Padua},
+  title = {On the Automatic Parallelization of the Perfect Benchmarks},
+  journal = {#DP#},
+  year = {1998},
+  volume = {9},
+  number = {1},
+  pages = {5--23},
+  url = {http://engineering.purdue.edu/paramnt/publications/1392.pdf}
+}
+</pre></td>
+</tr>
+<tr id="KiEi97" class="entry">
+	<td>Kim, S.-W. &amp; Eigenmann, R.</td>
+	<td>Max/P: detecting the maximum parallelism in a Fortran program <p class="infolinks">[<a href="javascript:toggleInfo('KiEi97','bibtex')">BibTeX</a>]</p></td>
+	<td>1997</td>
+	<td>&nbsp;</td>
+	<td>manual</td>
+	<td>&nbsp;</td>
+</tr>
+<tr id="bib_KiEi97" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@manual{KiEi97,
+  author = {Seon-Wook Kim and Rudolf Eigenmann},
+  title = {Max/P: detecting the maximum parallelism in a Fortran program},
+  year = {1997},
+  note = {Manual ECE-HPCLab-97201}
+}
+</pre></td>
+</tr>
+<tr id="ABE+97" class="entry">
+	<td>Adve, S., Burger, D., Eigenmann, R., Rawsthorne, A., Smith, M.D., Gebotys, C., Kandemir, M., Lilja, D.J., Choudhary, A., Fang, J. &amp; Yew, P.-C.</td>
+	<td>Changing Interaction of Compiler and Architecture <p class="infolinks">[<a href="javascript:toggleInfo('ABE+97','bibtex')">BibTeX</a>]</p></td>
+	<td>1997</td>
+	<td>IEEE Computer<br/>Vol. 30(12), pp. 51-58&nbsp;</td>
+	<td>article</td>
+	<td>&nbsp;</td>
+</tr>
+<tr id="bib_ABE+97" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@article{ABE+97,
+  author = {S. Adve and D. Burger and R. Eigenmann and A. Rawsthorne and M. D. Smith and C. Gebotys and M. Kandemir and D. J. Lilja and A. Choudhary and J. Fang and P.-C. Yew},
+  title = {Changing Interaction of Compiler and Architecture},
+  journal = {IEEE Computer},
+  year = {1997},
+  volume = {30},
+  number = {12},
+  pages = {51--58}
+}
+</pre></td>
+</tr>
+<tr id="VPE96" class="entry">
+	<td>Voss, M.J., Park, I. &amp; Eigenmann, R.</td>
+	<td>On the Machine-independent Target Language for Parallelizing Compilers <p class="infolinks">[<a href="javascript:toggleInfo('VPE96','bibtex')">BibTeX</a>]</p></td>
+	<td>1996</td>
+	<td>Processdings of the Sixth Workshop on Compilers for Parallel Computers (CPC'96), Aachen, Germany, pp. 207-218&nbsp;</td>
+	<td>inproceedings</td>
+	<td>&nbsp;</td>
+</tr>
+<tr id="bib_VPE96" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{VPE96,
+  author = {Michael J. Voss and Insung Park and Rudolf Eigenmann},
+  title = {On the Machine-independent Target Language for Parallelizing Compilers},
+  booktitle = {Processdings of the Sixth Workshop on Compilers for Parallel Computers (CPC'96), Aachen, Germany},
+  year = {1996},
+  pages = {207--218}
+}
+</pre></td>
+</tr>
+<tr id="EiHa96" class="entry">
+	<td>Eigenmann, R. &amp; Hassanzadeh, S.</td>
+	<td>Benchmarking with Real Industrial Applications: The SPEC High-Performance Group <p class="infolinks">[<a href="javascript:toggleInfo('EiHa96','bibtex')">BibTeX</a>]</p></td>
+	<td>1996</td>
+	<td>IEEE Computational Science &amp; Engineering<br/>Vol. 3(1), pp. 18-23&nbsp;</td>
+	<td>article</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/spechpg.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_EiHa96" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@article{EiHa96,
+  author = {Rudolf Eigenmann and Siamak Hassanzadeh},
+  title = {Benchmarking with Real Industrial Applications: The SPEC High-Performance Group},
+  journal = {IEEE Computational Science &amp; Engineering},
+  year = {1996},
+  volume = {3},
+  number = {1},
+  pages = {18--23},
+  url = {http://engineering.purdue.edu/paramnt/publications/spechpg.pdf}
+}
+</pre></td>
+</tr>
+<tr id="PE95" class="entry">
+	<td>Pottenger, B. &amp; Eigenmann, R.</td>
+	<td>Idiom Recognition in the Polaris Parallelizing Compiler <p class="infolinks">[<a href="javascript:toggleInfo('PE95','bibtex')">BibTeX</a>]</p></td>
+	<td>1995</td>
+	<td>The 9th ACM International Conference on Supercomputing (ICS'95), pp. 444-448&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="http://doi.acm.org/10.1145/224538.224655">DOI</a> <a href="http://engineering.purdue.edu/paramnt/publications/1426.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_PE95" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{PE95,
+  author = {Bill Pottenger and Rudolf Eigenmann},
+  title = {Idiom Recognition in the Polaris Parallelizing Compiler},
+  booktitle = {The 9th ACM International Conference on Supercomputing (ICS'95)},
+  publisher = {ACM Press},
+  year = {1995},
+  pages = {444--448},
+  url = {http://engineering.purdue.edu/paramnt/publications/1426.pdf},
+  doi = {http://doi.acm.org/10.1145/224538.224655}
+}
+</pre></td>
+</tr>
+<tr id="BlEi94c" class="entry">
+	<td>Blume, W. &amp; Eigenmann, R.</td>
+	<td>Symbolic Range Propagation <p class="infolinks">[<a href="javascript:toggleInfo('BlEi94c','bibtex')">BibTeX</a>]</p></td>
+	<td>1995</td>
+	<td>Proceedings of the 9th International Parallel Processing Symposium, pp. 357-363&nbsp;</td>
+	<td>article</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/1381.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_BlEi94c" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@article{BlEi94c,
+  author = {William Blume and Rudolf Eigenmann},
+  title = {Symbolic Range Propagation},
+  journal = {Proceedings of the 9th International Parallel Processing Symposium},
+  year = {1995},
+  pages = {357--363},
+  url = {http://engineering.purdue.edu/paramnt/publications/1381.pdf}
+}
+</pre></td>
+</tr>
+<tr id="BENP93" class="entry">
+	<td>Banerjee, U., Eigenmann, R., Nicolau, A. &amp; Padua, D.</td>
+	<td>Automatic Program Parallelization <p class="infolinks">[<a href="javascript:toggleInfo('BENP93','bibtex')">BibTeX</a>]</p></td>
+	<td>1993</td>
+	<td>Proceedings of the IEEE<br/>Vol. 81(2), pp. 211-243&nbsp;</td>
+	<td>article</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/BENP93.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_BENP93" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@article{BENP93,
+  author = {Utpal Banerjee and Rudolf Eigenmann and Alexandru Nicolau and David Padua},
+  title = {Automatic Program Parallelization},
+  journal = {Proceedings of the IEEE},
+  year = {1993},
+  volume = {81},
+  number = {2},
+  pages = {211--243},
+  url = {http://engineering.purdue.edu/paramnt/publications/BENP93.pdf}
+}
+</pre></td>
+</tr>
+<tr id="Eige93" class="entry">
+	<td>Eigenmann, R.</td>
+	<td>Toward a Methodology of Optimizing Programs for High-Performance Computers <p class="infolinks">[<a href="javascript:toggleInfo('Eige93','bibtex')">BibTeX</a>]</p></td>
+	<td>1993</td>
+	<td>Conference Proceedings, ICS'93, Tokyo, Japan, pp. 27-36&nbsp;</td>
+	<td>article</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/1178.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_Eige93" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@article{Eige93,
+  author = {Rudolf Eigenmann},
+  title = {Toward a Methodology of Optimizing Programs for High-Performance Computers},
+  journal = {Conference Proceedings, ICS'93, Tokyo, Japan},
+  year = {1993},
+  pages = {27--36},
+  url = {http://engineering.purdue.edu/paramnt/publications/1178.pdf}
+}
+</pre></td>
+</tr>
+<tr id="BlEi92*" class="entry">
+	<td>Blume, W. &amp; Eigenmann, R.</td>
+	<td>Performance Analysis of Parallelizing Compilers on the Perfect Benchmarks Programs <p class="infolinks">[<a href="javascript:toggleInfo('BlEi92*','bibtex')">BibTeX</a>]</p></td>
+	<td>1992</td>
+	<td>IEEE Transactions of Parallel and Distributed Systems<br/>Vol. 3(6), pp. 643-656&nbsp;</td>
+	<td>article</td>
+	<td><a href="http://engineering.purdue.edu/paramnt/publications/1218.pdf">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_BlEi92*" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@article{BlEi92*,
+  author = {William Blume and Rudolf Eigenmann},
+  title = {Performance Analysis of Parallelizing Compilers on the Perfect Benchmarks Programs},
+  journal = {IEEE Transactions of Parallel and Distributed Systems},
+  year = {1992},
+  volume = {3},
+  number = {6},
+  pages = {643--656},
+  url = {http://engineering.purdue.edu/paramnt/publications/1218.pdf}
+}
+</pre></td>
+</tr>
+</tbody>
+</table>
+
+<p>
+ <small>Created by <a href="http://jabref.sourceforge.net">JabRef</a> on 22/08/2013.</small>
+</p>
+
+</body>
+</html>
+
+<!-- File generated by JabRef ; Export Filter written by Mark Schenk -->

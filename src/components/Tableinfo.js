@@ -32,6 +32,10 @@ const useStyles = makeStyles((theme) => ({
   title:{
     fontFamily: 'KoHo',
   },
+  title2:{
+    fontFamily: 'KoHo',
+    color: "#000000"
+  },
   ima:{
     display: 'flex',
     height: '200px',
@@ -157,8 +161,8 @@ export default function Tableinfo() {
                   >
                     <Grid >
                         <Typography
-                          className={classes.title}
-                          color='#FFFFFF'
+                          className={classes.title2}
+                        
                         >
                          {row.Name}  
                       </Typography>
@@ -173,7 +177,7 @@ export default function Tableinfo() {
                 </Grid>
                   
               </StyledTableCell>
-              <StyledTableCell  className={classes.title} align="left">{row.Description}</StyledTableCell>
+              <StyledTableCell   className={classes.title2} align="left">{row.Description}</StyledTableCell>
               <StyledTableCell align="left">
               <Grid
                 direction="row"

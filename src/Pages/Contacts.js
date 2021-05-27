@@ -83,7 +83,7 @@ const rows = [
       "id": 3,
       "image":ImgAkshay,
       "Description": "We are creating HPC benchmarks that are representative of real-world applications. This is a collaboration with the Standard Performance Evaluation Corporation, SPEC and Indiana University.",
-      "Page":"http://akshayud.me/"
+      "Page":"https://sites.udel.edu/xpert-cdi/contact/"
   },
 ];
 function Contacts() {
@@ -113,7 +113,7 @@ function Contacts() {
                 <Grid
                     className={classes.row}
                     
-                    item xs={6} sm={3}                      
+                    item xs={6} sm={4}                      
                 >  
                     <RecipeReviewCard id={row.id} name={row.Name} description={row.Description} image={row.image} page={row.Page}/>
                 </Grid> 
