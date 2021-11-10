@@ -30,13 +30,12 @@
     "web-vitals": "^1.0.1"
   },
   "scripts": {
-    "predeploy": "yarn start build",
-    "deploy": "gh-pages -d build",
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
-    "build:release-ud2": "env-cmd -f ./.env.release-ud2 react-scripts build"
+    "predeploy": "yarn build",
+    "deploy": "gh-pages -d build"
   },
   "eslintConfig": {
     "extends": [
