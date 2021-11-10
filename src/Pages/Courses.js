@@ -1,11 +1,10 @@
 import React from 'react';
 import { makeStyles } from '@material-ui/core/styles';
-import Tableinfo from '../components/Tableinfo';
-import RecipeReviewCard from '../components/RecipeReviewCard';
-import ImgAkshay from '../static/images/Askhay.png';
-import ImgMigue from '../static/images/Migue.jpeg';
+import Course from '../components/Course';
+import ImgAkshay from '../static/images/parallel.jpg';
+import ImgRudi from '../static/images/computational.jpg';
+import Digital from '../static/images/digital.jpg';
 import '../resources/KoHo.css';
-import Paper from '@material-ui/core/Paper';
 import {
   Grid,
   Typography,
@@ -64,29 +63,29 @@ const useStyles = makeStyles((theme) => ({
 
 }));
 const rows = [
- 
   {
-      "Name": "Akshay Bhosale",
-      "id": 1,
+  "Name": "Computational & Data-Intensive Research Platforms & Applications, CPEG 467/667 (Fall 2019, Fall 2020)",
+   "id": 1,
+  "image":ImgRudi,
+  "Description":"An introductory course for students conducting computational and data-intensive research in all disciplines, providing an overview of relevant computer systems hardware, software, and applications",
+  "Page":"https://www.eecis.udel.edu/~eigenman/CPEG667-syllabus-F20.pdf"
+  },
+  {
+      "Name": "Principles of Parallel Computer Architectures, CPEG/ELEG 652, (Spring 2018, 2019, 2020, 2021)",
+      "id": 2,
       "image":ImgAkshay,
-      "Description": "I am currently working towards my PhD at the University of Delaware in Newark,DE . My major is Computer Engineering.My Undergrad major was Electronics Engineering. I have completed coursework in a variety of areas ranging from web application security, computer architecture, secure software design to parallel programming, compilers , ML and cryptography.",
+      "Description": "",
       "Page":"http://akshayud.me/"
   },
   {
-      "Name": "Parinaz Barakhshan",
-      "id": 2,
-      "image":ImgAkshay,
-      "Description": "We are creating HPC benchmarks that are representative of real-world applications. This is a collaboration with the Standard Performance Evaluation Corporation, SPEC and Indiana University.",
-      "Page":"https://sites.udel.edu/xpert-cdi/contact/"
-  }, {
-    "Name": "Miguel Rosas",
-     "id": 3,
-    "image":ImgMigue,
-    "Description":"Rudolf Eigenmann is a professor at the University of Delaware, Department of Electrical and Computer Engineering. From 1995 to 2017 he was at Purdue University, where he was a professor in the School of Electrical and Computer Engineering. From 2013-2017, he also served as Program Director in the National Science Foundation's Office of Advanced Cyberinfrastructure. ",
-    "Page":"https://www.eecis.udel.edu/~eigenman/index.html"
-    },
+      "Name": "Digital Systems Seminar, ELEG 662, (Spring 2019)",
+      "id": 3,
+      "image":Digital,
+      "Description": "This	is	a	seminar	class	with	bi-weekly	lectures	and discussions	by	guest	speakers,	faculty	and	 students	on	specialized	topics	in	digital	systems.",
+      "Page":"https://www.eecis.udel.edu/~eigenman/ELEG662-syllabus-S19.pdf"
+  },
 ];
-function Contacts() {
+function Courses() {
   const classes = useStyles();
   return (
 
@@ -102,7 +101,7 @@ function Contacts() {
                   variant="h4"
                   color='primary'
               >
-                Information of Contact  
+                Courses (Being) Taught 
               </Typography>
               <br/>
 
@@ -115,7 +114,7 @@ function Contacts() {
                     
                     item xs={6} sm={4}                      
                 >  
-                    <RecipeReviewCard id={row.id} name={row.Name} description={row.Description} image={row.image} page={row.Page}/>
+                    <Course id={row.id} name={row.Name} description={row.Description} image={row.image} page={row.Page}/>
                 </Grid> 
                 ))}  
               
@@ -133,4 +132,4 @@ function Contacts() {
   
   );
 }
-export default Contacts;
+export default Courses;

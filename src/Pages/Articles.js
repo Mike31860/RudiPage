@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import Tableinfo from '../components/Tableinfo'
+import ArticlesTable from '../components/ArticlesTable'
 import { makeStyles } from '@material-ui/core/styles';
 import Paper from '@material-ui/core/Paper';
 import ReactHtmlParser, { processNodes, convertNodeToElement, htmlparser2 } from 'react-html-parser';
@@ -99,7 +99,7 @@ function Articles() {
                     variant="h4"
                     color="primary"
                   >
-                    Still working on this, It will be ready soon!
+                    Publications
                   </Typography> 
                
                <br/>
@@ -123,7 +123,7 @@ function Articles() {
                         <div>
                            <div>
                            
-                           
+                           <ArticlesTable />
                            </div>
                   </div>
                      

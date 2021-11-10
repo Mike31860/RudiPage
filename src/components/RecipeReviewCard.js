@@ -17,7 +17,7 @@ import ExpandMoreIcon from '@material-ui/icons/ExpandMore';
 import MoreVertIcon from '@material-ui/icons/MoreVert';
 import PropTypes from 'prop-types';
 import ImgAkshay from '../static/images/Askhay.png';
-import ImgRudi from '../static/images/Rudi.jpg';
+import ImgMigue from '../static/images/Migue.jpeg';
 /* import ImgParinaz from '../static/images/parinaz.jpg'; */
 import ImgParinaz from '../static/images/parina.png';
 import ContactMailIcon from '@material-ui/icons/ContactMail';
@@ -84,7 +84,7 @@ const RecipeReviewCard = props =>{
         subheader="University of Delaware"
       />
 
-      <img  className={classes.ima} src={props.id==1?ImgRudi:(props.id==2?ImgAkshay:ImgParinaz
+      <img  className={classes.ima} src={props.id==1?ImgAkshay:(props.id==2?ImgParinaz:ImgMigue
         )}/>
       <CardContent>
         <Typography variant="body2" color="textSecondary" component="p">

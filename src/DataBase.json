@@ -1,0 +1,27 @@
+[{
+    "id": 1,
+    "Author": "Aurangzeb & Eigenmann, R.",
+    "Title": "HiPA: History-based Piecewise Approximation for Functions",
+    "Year": 2017,
+    "JournalProceedings": "ICS'17: Proceedings of the 31st International Conference on Supercomputing",
+    "Reftype": "inproceedings",
+    "DOI": "https://dl.acm.org/doi/10.1145/3079079.3079107"
+  }, {
+    
+    "id": 2,
+      "Author": "Aurangzeb & Eigenmann, R.",
+      "Title": "PROCsimate: A Scheme for Approximating Procedures with Dynamic Quality Monitoring and Result Guarantees",
+      "Year": 2017,
+      "JournalProceedings": "WAPCO'17: 3rd Workshop on Approximate Computing, The 12th International Conference on High Performance and Embedded Architecture and Compilation (HiPEAC'17)",
+      "Reftype": "inproceedings",
+      "DOI": "https://wapco.e-ce.uth.gr/papers/SESSION1/paper_1_3.pdf"
+  }, {
+   
+    "id": 3,
+      "Author": "Aurangzeb & Eigenmann, R.",
+      "Title": "Harnessing Parallelism in Multicore Systems to Expedite and Improve Function Approximation",
+      "Year": 2016,
+      "JournalProceedings": "LCPC'16: Proceedings of the 29th International Workshop on Languages and Compilers for Parallel Computing",
+      "Reftype": "inproceedings",
+      "DOI": "https://link.springer.com/chapter/10.1007%2F978-3-319-52709-3_7"
+  }]

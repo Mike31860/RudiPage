@@ -59,7 +59,7 @@ const useStyles = makeStyles((theme) => ({
 
 }));
 
-function Home() {
+function Research() {
 
   const classes = useStyles();
 
@@ -112,4 +112,4 @@ function Home() {
    
   );
 }
-export default Home;
+export default Research;
