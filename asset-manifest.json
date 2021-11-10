@@ -1,0 +1,35 @@
+{
+  "files": {
+    "main.css": "/RudiPage/static/css/main.b420954b.chunk.css",
+    "main.js": "/RudiPage/static/js/main.7d5e8fe0.chunk.js",
+    "main.js.map": "/RudiPage/static/js/main.7d5e8fe0.chunk.js.map",
+    "runtime-main.js": "/RudiPage/static/js/runtime-main.50fb107d.js",
+    "runtime-main.js.map": "/RudiPage/static/js/runtime-main.50fb107d.js.map",
+    "static/js/2.90a66865.chunk.js": "/RudiPage/static/js/2.90a66865.chunk.js",
+    "static/js/2.90a66865.chunk.js.map": "/RudiPage/static/js/2.90a66865.chunk.js.map",
+    "static/js/3.c8ca97ee.chunk.js": "/RudiPage/static/js/3.c8ca97ee.chunk.js",
+    "static/js/3.c8ca97ee.chunk.js.map": "/RudiPage/static/js/3.c8ca97ee.chunk.js.map",
+    "index.html": "/RudiPage/index.html",
+    "static/css/main.b420954b.chunk.css.map": "/RudiPage/static/css/main.b420954b.chunk.css.map",
+    "static/js/2.90a66865.chunk.js.LICENSE.txt": "/RudiPage/static/js/2.90a66865.chunk.js.LICENSE.txt",
+    "static/media/Askhay.87dfe2ff.png": "/RudiPage/static/media/Askhay.87dfe2ff.png",
+    "static/media/Migue.1af60628.jpeg": "/RudiPage/static/media/Migue.1af60628.jpeg",
+    "static/media/Rudi.1aa44d9e.jpg": "/RudiPage/static/media/Rudi.1aa44d9e.jpg",
+    "static/media/computational.e1621c29.jpg": "/RudiPage/static/media/computational.e1621c29.jpg",
+    "static/media/dataScience.705759c3.jpg": "/RudiPage/static/media/dataScience.705759c3.jpg",
+    "static/media/digital.0588b0ee.jpg": "/RudiPage/static/media/digital.0588b0ee.jpg",
+    "static/media/image2.628ddf00.jpg": "/RudiPage/static/media/image2.628ddf00.jpg",
+    "static/media/imageFive.548ec7b3.jpg": "/RudiPage/static/media/imageFive.548ec7b3.jpg",
+    "static/media/imageFour.0c1c7625.jpg": "/RudiPage/static/media/imageFour.0c1c7625.jpg",
+    "static/media/imageThree.a7595b7d.jpg": "/RudiPage/static/media/imageThree.a7595b7d.jpg",
+    "static/media/logo.05d65c9e.jpg": "/RudiPage/static/media/logo.05d65c9e.jpg",
+    "static/media/parallel.3eb8645a.jpg": "/RudiPage/static/media/parallel.3eb8645a.jpg",
+    "static/media/parina.941fce68.png": "/RudiPage/static/media/parina.941fce68.png"
+  },
+  "entrypoints": [
+    "static/js/runtime-main.50fb107d.js",
+    "static/js/2.90a66865.chunk.js",
+    "static/css/main.b420954b.chunk.css",
+    "static/js/main.7d5e8fe0.chunk.js"
+  ]
+}
